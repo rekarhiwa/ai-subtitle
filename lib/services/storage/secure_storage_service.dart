@@ -15,6 +15,8 @@ class SecureStorageService {
 
   static const _apiKeyKey = 'gemini_api_key';
   static const _languageKey = 'default_language';
+  static const _sourceLanguageKey = 'source_language';
+  static const _subtitleLanguageKey = 'subtitle_language';
   static const _presetKey = 'default_preset';
   static const _qualityKey = 'default_export_quality';
   static const _tempDirKey = 'temp_files_directory';
@@ -42,6 +44,29 @@ class SecureStorageService {
   Future<String> getDefaultLanguage() async {
     final prefs = await _getPrefs();
     return prefs.getString(_languageKey) ?? AppConfig.defaultLanguageCode;
+  }
+
+  Future<void> setSourceLanguage(String code) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_sourceLanguageKey, code);
+  }
+
+  Future<String> getSourceLanguage() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_sourceLanguageKey) ?? 'auto';
+  }
+
+  Future<void> setSubtitleLanguage(String code) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_subtitleLanguageKey, code);
+    await prefs.setString(_languageKey, code);
+  }
+
+  Future<String> getSubtitleLanguage() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_subtitleLanguageKey) ??
+        prefs.getString(_languageKey) ??
+        AppConfig.defaultLanguageCode;
   }
 
   Future<void> setDefaultPreset(String id) async {

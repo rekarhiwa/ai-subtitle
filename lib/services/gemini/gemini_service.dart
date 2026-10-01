@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 
 import '../../core/config/gemini_config.dart';
 import '../../core/errors/app_exception.dart';
+import '../../features/subtitle_editor/caption_ai_helpers.dart';
+import '../../models/app_language.dart';
 import '../../models/transcription_result.dart';
 
 class GeminiService {
@@ -61,6 +63,9 @@ class GeminiService {
   Future<TranscriptionResult> transcribeAudio({
     required String apiKey,
     required String audioPath,
+    AppLanguage sourceLanguage = AppLanguage.auto,
+    AppLanguage subtitleLanguage = AppLanguage.kurdishSorani,
+    Duration? mediaDuration,
     void Function(double progress, String message)? onProgress,
   }) async {
     final key = apiKey.trim();
@@ -71,7 +76,12 @@ class GeminiService {
       throw AppException.transcriptionFailed('Audio file missing');
     }
 
-    final prompt = await _loadPrompt();
+    final template = await _loadPrompt();
+    final prompt = CaptionPromptBuilder.fill(
+      template,
+      source: sourceLanguage,
+      target: subtitleLanguage,
+    );
     final size = await file.length();
     final mimeType = _mimeFor(audioPath);
 
@@ -96,13 +106,31 @@ class GeminiService {
               );
 
         onProgress?.call(0.9, 'Preparing timeline…');
-        return TranscriptionResult.fromRawJson(text);
+        final result = TranscriptionResult.fromRawJson(text);
+        final cleaned = CaptionPostProcessor.clean(
+          result.segments,
+          mediaDuration: mediaDuration,
+        );
+        if (cleaned.isEmpty) {
+          throw AppException.transcriptionFailed(
+            'AI returned no usable captions. Check source/subtitle language and try again.',
+          );
+        }
+        return TranscriptionResult(
+          language: subtitleLanguage.code,
+          segments: cleaned,
+        );
       } on AppException catch (e) {
         if (e.code == 'invalid_api_key' || e.code == 'quota_exceeded') {
           rethrow;
         }
         lastError = e;
         _log.warning('Attempt $attempt failed: $e');
+      } on FormatException catch (e) {
+        lastError = AppException.transcriptionFailed(
+          'Bad AI JSON (${e.message}). Try again or switch languages.',
+        );
+        _log.warning('Attempt $attempt parse failed: $e');
       } catch (e, st) {
         lastError = e;
         _log.warning('Attempt $attempt failed', e, st);
@@ -335,6 +363,31 @@ class GeminiService {
       await _client.delete(uri);
     } catch (e) {
       _log.fine('Failed to delete uploaded file: $e');
+    }
+  }
+
+  /// Free-form text generation for AI Studio tools.
+  Future<String> generateText({
+    required String apiKey,
+    required String prompt,
+  }) async {
+    final key = apiKey.trim();
+    if (key.isEmpty) throw AppException.missingApiKey();
+    final model = GenerativeModel(
+      model: GeminiConfig.model,
+      apiKey: key,
+    );
+    try {
+      final response = await model
+          .generateContent([Content.text(prompt)])
+          .timeout(const Duration(seconds: 90));
+      final text = response.text;
+      if (text == null || text.trim().isEmpty) {
+        throw AppException.transcriptionFailed('Empty AI response');
+      }
+      return text.trim();
+    } on GenerativeAIException catch (e) {
+      throw _mapGenerativeError(e);
     }
   }
 

@@ -1,8 +1,16 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
 class FontOption {
   const FontOption({
     required this.id,
     required this.displayName,
     required this.family,
+    /// Family name used by libass / FFmpeg (may differ from Flutter family).
+    this.assFontName,
     this.assetRegular,
     this.assetBold,
     this.isSystemFallback = false,
@@ -11,12 +19,15 @@ class FontOption {
   final String id;
   final String displayName;
   final String family;
+  final String? assFontName;
   final String? assetRegular;
   final String? assetBold;
   final bool isSystemFallback;
+
+  String get exportFontName => assFontName ?? family;
 }
 
-/// Font manager — add new fonts by registering [FontOption]s.
+/// Font manager — extracts bundled TTFs so FFmpeg can burn-in captions.
 class FontService {
   FontService();
 
@@ -27,6 +38,8 @@ class FontService {
       id: defaultFontId,
       displayName: 'Default Kurdish',
       family: 'NotoSansArabic',
+      // Actual TTF family name read by libass:
+      assFontName: 'Noto Sans Arabic',
       assetRegular: 'assets/fonts/NotoSansArabic-Regular.ttf',
       assetBold: 'assets/fonts/NotoSansArabic-Bold.ttf',
     ),
@@ -34,6 +47,7 @@ class FontService {
       id: 'system_arabic',
       displayName: 'System Arabic',
       family: 'sans-serif',
+      assFontName: 'sans-serif',
       isSystemFallback: true,
     ),
   ];
@@ -52,14 +66,52 @@ class FontService {
 
   FontOption? findByFamily(String family) {
     for (final f in _fonts) {
-      if (f.family == family) return f;
+      if (f.family == family || f.assFontName == family) return f;
     }
     return null;
   }
 
-  /// Register a custom font at runtime / Phase 2 custom import hook.
   void register(FontOption option) {
     _fonts.removeWhere((f) => f.id == option.id);
     _fonts.add(option);
+  }
+
+  /// Copy bundled fonts into a writable directory for FFmpeg `fontsdir=`.
+  Future<String?> ensureExportFontsDir() async {
+    try {
+      final root = await getTemporaryDirectory();
+      final dir = Directory(p.join(root.path, 'montage_fonts'));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      var wrote = false;
+      for (final font in _fonts) {
+        for (final asset in [font.assetRegular, font.assetBold]) {
+          if (asset == null) continue;
+          final name = p.basename(asset);
+          final out = File(p.join(dir.path, name));
+          if (!await out.exists() || await out.length() < 1000) {
+            final data = await rootBundle.load(asset);
+            await out.writeAsBytes(
+              data.buffer.asUint8List(
+                data.offsetInBytes,
+                data.lengthInBytes,
+              ),
+              flush: true,
+            );
+          }
+          wrote = true;
+        }
+      }
+      return wrote ? dir.path : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// ASS Fontname for a Flutter family id.
+  String assFontNameFor(String flutterFamily) {
+    return findByFamily(flutterFamily)?.exportFontName ?? 'Noto Sans Arabic';
   }
 }

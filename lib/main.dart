@@ -25,11 +25,11 @@ Future<void> main() async {
     }
   });
 
-  runApp(const ProviderScope(child: AiSubtitleApp()));
+  runApp(const ProviderScope(child: MontageApp()));
 }
 
-class AiSubtitleApp extends StatelessWidget {
-  const AiSubtitleApp({super.key});
+class MontageApp extends StatelessWidget {
+  const MontageApp({super.key});
 
   @override
   Widget build(BuildContext context) {

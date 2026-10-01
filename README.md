@@ -1,6 +1,6 @@
-# AI Subtitle
+# Montage
 
-Production-oriented Flutter app for **automatic Kurdish Sorani (Central Kurdish) video subtitles**.
+Easy **caption montage studio** for Kurdish Sorani — CapCut-like timeline, local FFmpeg, Gemini AI.
 
 Pipeline (fully local processing except Gemini transcription):
 

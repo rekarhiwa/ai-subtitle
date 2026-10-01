@@ -1,0 +1,278 @@
+﻿
+00:00 +0: Feature #1: Multi-track timeline
+00:00 +1: Feature #2: Import video / image / audio
+00:00 +2: Feature #3: Trim / Cut / Split
+00:00 +3: Feature #4: Delete / Duplicate clip
+00:00 +4: Feature #5: Ripple delete
+00:00 +5: Feature #6: Reverse video
+00:00 +6: Feature #7: Speed slow / fast / curve
+00:00 +7: Feature #8: Freeze frame
+00:00 +8: Feature #9: Crop / Zoom / Pan
+00:00 +9: Feature #10: Rotate / Flip
+00:00 +10: Feature #11: Aspect ratio
+00:00 +11: Feature #12: Canvas / background color
+00:00 +12: Feature #13: Replace clip
+00:00 +13: Feature #14: Merge / compound clip
+00:00 +14: Feature #15: Keyframe animation
+00:00 +15: Feature #16: Opacity / blend
+00:00 +16: Feature #17: Volume per clip
+00:00 +17: Feature #18: Fade in / out
+00:00 +18: Feature #19: Snap to beat / playhead
+00:00 +19: Feature #20: Undo / Redo history
+00:00 +20: Feature #21: Music library
+00:00 +21: Feature #22: Sound effects library
+00:00 +22: Feature #23: Extract audio from video
+00:00 +23: Feature #24: Voiceover recording
+00:00 +24: Feature #25: Auto beat sync
+00:00 +25: Feature #26: Voice effects
+00:00 +26: Feature #27: Noise reduction
+00:00 +27: Feature #28: Voice enhancement
+00:00 +28: Feature #29: Auto volume / loudness
+00:00 +29: Feature #30: Ducking music under voice
+00:00 +30: Feature #31: Audio stretch
+00:00 +31: Feature #32: Multi audio tracks
+00:00 +32: Feature #33: Mute / Solo
+00:00 +33: Feature #34: Audio fade handles
+00:00 +34: Feature #35: Import MP3/M4A/WAV
+00:00 +35: Feature #36: Auto Captions AI
+00:00 +36: Feature #37: Multi-language speech recognition
+00:00 +37: Feature #38: Caption edit list
+00:00 +38: Feature #39: Karaoke word highlight
+00:00 +39: Feature #40: Caption templates
+00:00 +40: Feature #41: Font library
+00:00 +41: Feature #42: Text color / outline / shadow
+00:00 +42: Feature #43: Text animation
+00:00 +43: Feature #44: Text tracking
+00:00 +44: Feature #45: Manual captions
+00:00 +45: Feature #46: Translate captions
+00:00 +46: Feature #47: Auto lyrics for songs
+00:00 +47: Feature #48: Import SRT/TXT
+00:00 +48: Feature #49: Export captions
+00:00 +49: Feature #50: Text bubbles / stickers text
+00:00 +50: Feature #51: Title / lower-third presets
+00:00 +51: Feature #52: Glow / neon text
+00:00 +52: Feature #53: Stroke / background box
+00:00 +53: Feature #54: Text position keyframes
+00:00 +54: Feature #55: Bulk caption restyle
+00:00 +55: Feature #56: Transitions library
+00:00 +56: Feature #57: Video effects
+00:00 +57: Feature #58: Body effects
+00:00 +58: Feature #59: Face effects / beauty
+00:00 +59: Feature #60: Filters / LUTs
+00:00 +60: Feature #61: Adjust brightness / contrast
+00:00 +61: Feature #62: HSL / color wheels
+00:00 +62: Feature #63: Vignette / grain
+00:00 +63: Feature #64: Motion tracking effects
+00:00 +64: Feature #65: Mask / shape mask
+00:00 +65: Feature #66: Chroma key green screen
+00:00 +66: Feature #67: Blend modes
+00:00 +67: Feature #68: Overlay effects
+00:00 +68: Feature #69: Speed ramping FX
+00:00 +69: Feature #70: 3D zoom / camera FX
+00:00 +70: Feature #71: Stabilization
+00:00 +71: Feature #72: Auto enhance
+00:00 +72: Feature #73: Retouch / makeup AI
+00:00 +73: Feature #74: Skin smooth
+00:00 +74: Feature #75: Flash / light leaks
+00:00 +75: Feature #76: Stickers library
+00:00 +76: Feature #77: Animated stickers
+00:00 +77: Feature #78: Emoji stickers
+00:00 +78: Feature #79: Picture-in-Picture
+00:00 +79: Feature #80: Overlay video
+00:00 +80: Feature #81: Image layer
+00:00 +81: Feature #82: Sticker keyframes
+00:00 +82: Feature #83: Auto align stickers
+00:00 +83: Feature #84: Blend overlays
+00:00 +84: Feature #85: Brand watermark
+00:00 +85: Feature #86: AutoCut
+00:00 +86: Feature #87: AI Clipper best moments
+00:00 +87: Feature #88: Long video to Shorts
+00:00 +88: Feature #89: AI Auto captions
+00:00 +89: Feature #90: Transcript-based edit
+00:00 +90: Feature #91: Remove filler words
+00:00 +91: Feature #92: Eye-contact correction
+00:00 +92: Feature #93: AI Video Translator
+00:00 +93: Feature #94: Remove background
+00:00 +94: Feature #95: AI Remove object
+00:00 +95: Feature #96: AI Text Remover
+00:00 +96: Feature #97: Text-to-speech AI voice
+00:00 +97: Feature #98: AI Avatar
+00:00 +98: Feature #99: Lipsync
+00:00 +99: Feature #100: Mimic Motion
+00:00 +100: Feature #101: AI Dialogue Scene
+00:00 +101: Feature #102: AI Image generate
+00:00 +102: Feature #103: AI Video generate
+00:00 +103: Feature #104: AI Music generate
+00:00 +104: Feature #105: Text-to-Video
+00:00 +105: Feature #106: Story Maker
+00:00 +106: Feature #107: Face swap
+00:00 +107: Feature #108: Video to Anime
+00:00 +108: Feature #109: Auto Styles
+00:00 +109: Feature #110: Image inpainting
+00:00 +110: Feature #111: AI Character generator
+00:00 +111: Feature #112: Beat-aware auto edit
+00:00 +112: Feature #113: Smart template fill
+00:00 +113: Feature #114: Prompt-based editing
+00:00 +114: Feature #115: Cloud AI credits
+00:00 +115: Feature #116: Template catalog
+00:00 +116: Feature #117: Trending TikTok templates
+00:00 +117: Feature #118: One-tap template apply
+00:00 +118: Feature #119: Brand kits
+00:00 +119: Feature #120: Stock media library
+00:00 +120: Feature #121: Direct share social
+00:00 +121: Feature #122: Draft cloud sync
+00:00 +122: Feature #123: Collaborate
+00:00 +123: Feature #124: Project backup
+00:00 +124: Feature #125: Cross-device drafts
+00:00 +125: Feature #126: Export 720p / 1080p
+00:00 +126: Feature #127: Export 2K / 4K
+00:00 +127: Feature #128: Frame rate options
+00:00 +128: Feature #129: Bitrate / quality
+00:00 +129: Feature #130: No watermark
+00:00 +130: Feature #131: Export GIF
+00:00 +131: Feature #132: Batch export
+00:00 +132: Feature #133: Hardware acceleration
+00:00 +133: Feature #134: Proxy / performance modes
+00:00 +134: Feature #135: Project presets / ratios
+00:00 +135: Feature #136: AI Kurdish Subtitles Studio
+========== FEATURE QA REPORT (136) ==========
+#  1 [PASS   ] Multi-track timeline ÔÇö multi-clip timeline reflow
+#  2 [PASS   ] Import video / image / audio ÔÇö media clip model accepts import paths
+#  3 [PASS   ] Trim / Cut / Split ÔÇö split at 3s ÔåÆ 2 clips
+#  4 [PASS   ] Delete / Duplicate clip ÔÇö duplicate + delete
+#  5 [PASS   ] Ripple delete ÔÇö ripple delete reflows
+#  6 [PASS   ] Reverse video ÔÇö reverse flag toggled
+#  7 [PASS   ] Speed slow / fast / curve ÔÇö speed 2x & 0.5x
+#  8 [PASS   ] Freeze frame ÔÇö freeze frame inserted
+#  9 [WIRED  ] Crop / Zoom / Pan ÔÇö PASS: crop fields persisted (preview)
+# 10 [PASS   ] Rotate / Flip ÔÇö rotate 90 + flipH
+# 11 [PASS   ] Aspect ratio ÔÇö aspect presets 6
+# 12 [PASS   ] Canvas / background color ÔÇö canvas color model
+# 13 [PASS   ] Replace clip ÔÇö replace via copyWith sourcePath
+# 14 [WIRED  ] Merge / compound clip ÔÇö PASS: merge adjacent contiguous clips
+# 15 [WIRED  ] Keyframe animation ÔÇö opacity as keyframe proxy (partial)
+# 16 [PASS   ] Opacity / blend ÔÇö opacity 40%
+# 17 [PASS   ] Volume per clip ÔÇö clip volume 60%
+# 18 [PASS   ] Fade in / out ÔÇö fade in/out ms
+# 19 [PASS   ] Snap to beat / playhead ÔÇö snapEnabled project flag (UI)
+# 20 [PASS   ] Undo / Redo history ÔÇö undo/redo via EditorController (wired)
+# 21 [WIRED  ] Music library ÔÇö audio panel / planned library
+# 22 [PLANNED] Sound effects library ÔÇö roadmap / UI entry only
+# 23 [PASS   ] Extract audio from video ÔÇö extract_audio action wired to FFmpeg
+# 24 [PLANNED] Voiceover recording ÔÇö roadmap / UI entry only
+# 25 [PLANNED] Auto beat sync ÔÇö roadmap / UI entry only
+# 26 [PLANNED] Voice effects ÔÇö roadmap / UI entry only
+# 27 [PLANNED] Noise reduction ÔÇö roadmap / UI entry only
+# 28 [PLANNED] Voice enhancement ÔÇö roadmap / UI entry only
+# 29 [WIRED  ] Auto volume / loudness ÔÇö volume model (partial auto-loudness)
+# 30 [PLANNED] Ducking music under voice ÔÇö roadmap / UI entry only
+# 31 [PLANNED] Audio stretch ÔÇö roadmap / UI entry only
+# 32 [PASS   ] Multi audio tracks ÔÇö multi audio clips
+# 33 [PASS   ] Mute / Solo ÔÇö mute original audio flag
+# 34 [WIRED  ] Audio fade handles ÔÇö audio panel / planned library
+# 35 [PASS   ] Import MP3/M4A/WAV ÔÇö MP3/M4A/WAV clip model
+# 36 [PASS   ] Auto Captions AI ÔÇö AI/manual caption pipeline models
+# 37 [PASS   ] Multi-language speech recognition ÔÇö AI/manual caption pipeline models
+# 38 [PASS   ] Caption edit list ÔÇö AI/manual caption pipeline models
+# 39 [WIRED  ] Karaoke word highlight ÔÇö word-by-word enum present (partial karaoke)
+# 40 [PASS   ] Caption templates ÔÇö 3 caption style presets
+# 41 [PASS   ] Font library ÔÇö 3 caption style presets
+# 42 [PASS   ] Text color / outline / shadow ÔÇö 3 caption style presets
+# 43 [PASS   ] Text animation ÔÇö text animation configs
+# 44 [PLANNED] Text tracking ÔÇö roadmap / UI entry only
+# 45 [PASS   ] Manual captions ÔÇö AI/manual caption pipeline models
+# 46 [PASS   ] Translate captions ÔÇö AI/manual caption pipeline models
+# 47 [PLANNED] Auto lyrics for songs ÔÇö roadmap / UI entry only
+# 48 [PASS   ] Import SRT/TXT ÔÇö SRT import parse
+# 49 [PASS   ] Export captions ÔÇö SRT export
+# 50 [WIRED  ] Text bubbles / stickers text ÔÇö style/sticker text partial
+# 51 [WIRED  ] Title / lower-third presets ÔÇö style/sticker text partial
+# 52 [WIRED  ] Glow / neon text ÔÇö style/sticker text partial
+# 53 [PASS   ] Stroke / background box ÔÇö 3 caption style presets
+# 54 [WIRED  ] Text position keyframes ÔÇö style/sticker text partial
+# 55 [PASS   ] Bulk caption restyle ÔÇö 3 caption style presets
+# 56 [PASS   ] Transitions library ÔÇö 8 transitions
+# 57 [WIRED  ] Video effects ÔÇö PASS: filter presets 8
+# 58 [PLANNED] Body effects ÔÇö roadmap / UI entry only
+# 59 [PLANNED] Face effects / beauty ÔÇö roadmap / UI entry only
+# 60 [PASS   ] Filters / LUTs ÔÇö filter presets 8
+# 61 [PASS   ] Adjust brightness / contrast ÔÇö brightness/contrast/sat/vignette/grain
+# 62 [WIRED  ] HSL / color wheels ÔÇö PASS: brightness/contrast/sat/vignette/grain
+# 63 [PASS   ] Vignette / grain ÔÇö brightness/contrast/sat/vignette/grain
+# 64 [PLANNED] Motion tracking effects ÔÇö roadmap / UI entry only
+# 65 [PLANNED] Mask / shape mask ÔÇö roadmap / UI entry only
+# 66 [PLANNED] Chroma key green screen ÔÇö roadmap / UI entry only
+# 67 [WIRED  ] Blend modes ÔÇö partial blend/overlay/speed-ramp via clip fields
+# 68 [WIRED  ] Overlay effects ÔÇö partial blend/overlay/speed-ramp via clip fields
+# 69 [WIRED  ] Speed ramping FX ÔÇö partial blend/overlay/speed-ramp via clip fields
+# 70 [PLANNED] 3D zoom / camera FX ÔÇö roadmap / UI entry only
+# 71 [PLANNED] Stabilization ÔÇö roadmap / UI entry only
+# 72 [WIRED  ] Auto enhance ÔÇö PASS: brightness/contrast/sat/vignette/grain
+# 73 [PLANNED] Retouch / makeup AI ÔÇö roadmap / UI entry only
+# 74 [PLANNED] Skin smooth ÔÇö roadmap / UI entry only
+# 75 [WIRED  ] Flash / light leaks ÔÇö PASS: filter presets 8
+# 76 [PASS   ] Stickers library ÔÇö sticker/emoji model
+# 77 [WIRED  ] Animated stickers ÔÇö sticker partial
+# 78 [PASS   ] Emoji stickers ÔÇö sticker/emoji model
+# 79 [PLANNED] Picture-in-Picture ÔÇö roadmap / UI entry only
+# 80 [PLANNED] Overlay video ÔÇö roadmap / UI entry only
+# 81 [WIRED  ] Image layer ÔÇö sticker partial
+# 82 [WIRED  ] Sticker keyframes ÔÇö sticker partial
+# 83 [PLANNED] Auto align stickers ÔÇö roadmap / UI entry only
+# 84 [WIRED  ] Blend overlays ÔÇö sticker partial
+# 85 [WIRED  ] Brand watermark ÔÇö sticker partial
+# 86 [PLANNED] AutoCut ÔÇö roadmap / UI entry only
+# 87 [PLANNED] AI Clipper best moments ÔÇö roadmap / UI entry only
+# 88 [PLANNED] Long video to Shorts ÔÇö roadmap / UI entry only
+# 89 [PASS   ] AI Auto captions ÔÇö AI/manual caption pipeline models
+# 90 [WIRED  ] Transcript-based edit ÔÇö transcript split partial
+# 91 [PLANNED] Remove filler words ÔÇö roadmap / UI entry only
+# 92 [PLANNED] Eye-contact correction ÔÇö roadmap / UI entry only
+# 93 [PASS   ] AI Video Translator ÔÇö AI/manual caption pipeline models
+# 94 [PLANNED] Remove background ÔÇö roadmap / UI entry only
+# 95 [PLANNED] AI Remove object ÔÇö roadmap / UI entry only
+# 96 [PLANNED] AI Text Remover ÔÇö roadmap / UI entry only
+# 97 [PLANNED] Text-to-speech AI voice ÔÇö roadmap / UI entry only
+# 98 [PLANNED] AI Avatar ÔÇö roadmap / UI entry only
+# 99 [PLANNED] Lipsync ÔÇö roadmap / UI entry only
+#100 [PLANNED] Mimic Motion ÔÇö roadmap / UI entry only
+#101 [PLANNED] AI Dialogue Scene ÔÇö roadmap / UI entry only
+#102 [PLANNED] AI Image generate ÔÇö roadmap / UI entry only
+#103 [PLANNED] AI Video generate ÔÇö roadmap / UI entry only
+#104 [PLANNED] AI Music generate ÔÇö roadmap / UI entry only
+#105 [PLANNED] Text-to-Video ÔÇö roadmap / UI entry only
+#106 [PLANNED] Story Maker ÔÇö roadmap / UI entry only
+#107 [PLANNED] Face swap ÔÇö roadmap / UI entry only
+#108 [PLANNED] Video to Anime ÔÇö roadmap / UI entry only
+#109 [WIRED  ] Auto Styles ÔÇö PASS: 3 caption style presets
+#110 [PLANNED] Image inpainting ÔÇö roadmap / UI entry only
+#111 [PLANNED] AI Character generator ÔÇö roadmap / UI entry only
+#112 [PLANNED] Beat-aware auto edit ÔÇö roadmap / UI entry only
+#113 [PLANNED] Smart template fill ÔÇö roadmap / UI entry only
+#114 [PLANNED] Prompt-based editing ÔÇö roadmap / UI entry only
+#115 [WIRED  ] Cloud AI credits ÔÇö AI credits partial (Gemini key storage)
+#116 [WIRED  ] Template catalog ÔÇö template/social planned or partial
+#117 [PLANNED] Trending TikTok templates ÔÇö roadmap / UI entry only
+#118 [WIRED  ] One-tap template apply ÔÇö PASS: 3 caption style presets
+#119 [PLANNED] Brand kits ÔÇö roadmap / UI entry only
+#120 [PLANNED] Stock media library ÔÇö roadmap / UI entry only
+#121 [PASS   ] Direct share social ÔÇö share_plus export path wired
+#122 [PLANNED] Draft cloud sync ÔÇö roadmap / UI entry only
+#123 [PLANNED] Collaborate ÔÇö roadmap / UI entry only
+#124 [PASS   ] Project backup ÔÇö project persist/backup wired
+#125 [WIRED  ] Cross-device drafts ÔÇö PASS: project persist/backup wired
+#126 [PASS   ] Export 720p / 1080p ÔÇö export quality presets
+#127 [WIRED  ] Export 2K / 4K ÔÇö export quality partial (device dependent)
+#128 [WIRED  ] Frame rate options ÔÇö export quality partial (device dependent)
+#129 [PASS   ] Bitrate / quality ÔÇö export quality presets
+#130 [PASS   ] No watermark ÔÇö export quality presets
+#131 [PLANNED] Export GIF ÔÇö roadmap / UI entry only
+#132 [PLANNED] Batch export ÔÇö roadmap / UI entry only
+#133 [WIRED  ] Hardware acceleration ÔÇö export quality partial (device dependent)
+#134 [PLANNED] Proxy / performance modes ÔÇö roadmap / UI entry only
+#135 [PASS   ] Project presets / ratios ÔÇö project ratio presets
+#136 [PASS   ] AI Kurdish Subtitles Studio ÔÇö AI/manual caption pipeline models
+PASS=49  WIRED=32  PLANNED=55  FAIL=0  TOTAL=136
+=============================================
+
+

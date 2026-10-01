@@ -88,10 +88,26 @@ class _AnimatedSubtitleWidgetState extends State<AnimatedSubtitleWidget>
     final left = widget.videoSize.width * style.positionX - maxWidth / 2;
     final top = widget.videoSize.height * style.positionY;
 
-    final textWidget = _OutlinedText(
-      text: widget.text,
-      style: style,
-    );
+    final textWidget = widget.animation.type == SubtitleAnimationType.wordByWord
+        ? const SizedBox.shrink()
+        : _OutlinedText(
+            text: widget.text,
+            style: style,
+          );
+
+    Widget content = textWidget;
+    if (style.backgroundOpacity > 0.01 &&
+        style.backgroundColor.a > 0 &&
+        widget.animation.type != SubtitleAnimationType.wordByWord) {
+      content = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: style.backgroundColor.withValues(alpha: style.backgroundOpacity),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: textWidget,
+      );
+    }
 
     return Positioned(
       left: left.clamp(0, widget.videoSize.width),
@@ -103,7 +119,7 @@ class _AnimatedSubtitleWidgetState extends State<AnimatedSubtitleWidget>
           final t = widget.animation.curve.transform(_controller.value);
           return _applyAnimation(t, child!);
         },
-        child: textWidget,
+        child: content,
       ),
     );
   }
@@ -143,10 +159,65 @@ class _AnimatedSubtitleWidgetState extends State<AnimatedSubtitleWidget>
           child: Transform.translate(offset: Offset(dx, 0), child: child),
         );
       case SubtitleAnimationType.wordByWord:
-        final opacity =
-            config.opacityFrom + (1 - config.opacityFrom) * t;
-        return Opacity(opacity: opacity.clamp(0.0, 1.0), child: child);
+        return _KaraokeText(
+          text: widget.text,
+          style: widget.style,
+          progress: t,
+        );
     }
+  }
+}
+
+class _KaraokeText extends StatelessWidget {
+  const _KaraokeText({
+    required this.text,
+    required this.style,
+    required this.progress,
+  });
+
+  final String text;
+  final SubtitleStyle style;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final words = text.trim().split(RegExp(r'\s+'));
+    if (words.isEmpty) return const SizedBox.shrink();
+    final active = (progress * words.length).floor().clamp(0, words.length);
+    final baseSize = style.fontSize *
+        (MediaQuery.sizeOf(context).shortestSide < 700 ? 0.45 : 0.55);
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (var i = 0; i < words.length; i++)
+            Text(
+              words[i],
+              style: TextStyle(
+                fontFamily: style.fontFamily,
+                fontSize: baseSize,
+                fontWeight: style.fontWeight,
+                color: i < active
+                    ? style.textColor
+                    : style.textColor.withValues(alpha: 0.35),
+                shadows: [
+                  Shadow(
+                    color: i < active
+                        ? style.shadowColor
+                        : style.shadowColor.withValues(alpha: 0.2),
+                    blurRadius: style.shadowBlur,
+                    offset: style.shadowOffset,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

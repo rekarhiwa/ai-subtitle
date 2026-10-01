@@ -75,4 +75,72 @@ class FFmpegService implements VideoProcessingService {
         fontsDir: fontsDir,
         onProgress: onProgress,
       );
+
+  @override
+  Future<String> trimAndConcat({
+    required List<TimelineSegmentSpec> segments,
+    required String outputPath,
+    required ExportQuality quality,
+    required String workDir,
+    ProgressCallback? onProgress,
+  }) =>
+      _delegate.trimAndConcat(
+        segments: segments,
+        outputPath: outputPath,
+        quality: quality,
+        workDir: workDir,
+        onProgress: onProgress,
+      );
+
+  @override
+  Future<String> mixBackgroundAudio({
+    required String videoPath,
+    required String audioPath,
+    required String outputPath,
+    double videoVolume = 1.0,
+    double audioVolume = 0.8,
+    Duration audioDelay = Duration.zero,
+    bool muteOriginal = false,
+    ProgressCallback? onProgress,
+  }) =>
+      _delegate.mixBackgroundAudio(
+        videoPath: videoPath,
+        audioPath: audioPath,
+        outputPath: outputPath,
+        videoVolume: videoVolume,
+        audioVolume: audioVolume,
+        audioDelay: audioDelay,
+        muteOriginal: muteOriginal,
+        onProgress: onProgress,
+      );
+
+  @override
+  Future<String> generateTone({
+    required String lavfiSource,
+    required String outputPath,
+    ProgressCallback? onProgress,
+  }) =>
+      _delegate.generateTone(
+        lavfiSource: lavfiSource,
+        outputPath: outputPath,
+        onProgress: onProgress,
+      );
+
+  @override
+  Future<String> exportGif({
+    required String videoPath,
+    required String outputPath,
+    Duration start = Duration.zero,
+    Duration duration = const Duration(seconds: 3),
+    int width = 480,
+    ProgressCallback? onProgress,
+  }) =>
+      _delegate.exportGif(
+        videoPath: videoPath,
+        outputPath: outputPath,
+        start: start,
+        duration: duration,
+        width: width,
+        onProgress: onProgress,
+      );
 }

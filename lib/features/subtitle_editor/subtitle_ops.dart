@@ -1,11 +1,37 @@
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/timestamp_utils.dart';
 import '../../models/subtitle_segment.dart';
 
 class SubtitleOps {
   SubtitleOps._();
 
   static const minDuration = Duration(milliseconds: 200);
+
+  /// Parse a standard SRT file into segments.
+  static List<SubtitleSegment> parseSrt(String content) {
+    final blocks = content.replaceAll('\r\n', '\n').split(RegExp(r'\n\s*\n'));
+    final out = <SubtitleSegment>[];
+    final timeRe = RegExp(
+      r'(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})',
+    );
+    for (final block in blocks) {
+      final lines = block.trim().split('\n');
+      if (lines.length < 2) continue;
+      var i = 0;
+      if (RegExp(r'^\d+$').hasMatch(lines[0].trim())) i = 1;
+      if (i >= lines.length) continue;
+      final m = timeRe.firstMatch(lines[i]);
+      if (m == null) continue;
+      final start = TimestampUtils.tryParse(m.group(1)!);
+      final end = TimestampUtils.tryParse(m.group(2)!);
+      if (start == null || end == null || end <= start) continue;
+      final text = lines.skip(i + 1).join('\n').trim();
+      if (text.isEmpty) continue;
+      out.add(SubtitleSegment.create(start: start, end: end, text: text));
+    }
+    return sorted(out);
+  }
 
   static List<SubtitleSegment> sorted(List<SubtitleSegment> segments) {
     return [...segments]..sort((a, b) => a.start.compareTo(b.start));
@@ -109,6 +135,50 @@ class SubtitleOps {
       if (s.contains(position)) return s;
     }
     return null;
+  }
+
+  /// Remove filler words from caption text (#91).
+  static List<SubtitleSegment> removeFillers(List<SubtitleSegment> segments) {
+    final fillers = RegExp(
+      r'\b(um+|uh+|erm+|like|you know|basically|literally|یانی|ئەم|واتە)\b',
+      caseSensitive: false,
+    );
+    final out = <SubtitleSegment>[];
+    for (final s in segments) {
+      final cleaned = s.text
+          .replaceAll(fillers, ' ')
+          .replaceAll(RegExp(r'\s{2,}'), ' ')
+          .trim();
+      if (cleaned.isEmpty) continue;
+      out.add(s.copyWith(text: cleaned));
+    }
+    return sorted(out);
+  }
+
+  /// Split long captions on punctuation for transcript-based edit (#90).
+  static List<SubtitleSegment> splitBySentences(List<SubtitleSegment> segments) {
+    final out = <SubtitleSegment>[];
+    for (final s in segments) {
+      final parts = s.text
+          .split(RegExp(r'[.!?؟۔]\s*'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (parts.length <= 1) {
+        out.add(s);
+        continue;
+      }
+      final total = s.duration.inMilliseconds;
+      var cursor = s.start;
+      for (var i = 0; i < parts.length; i++) {
+        final share = ((i + 1) / parts.length * total).round() -
+            (i / parts.length * total).round();
+        final end = cursor + Duration(milliseconds: share.clamp(200, total));
+        out.add(SubtitleSegment.create(start: cursor, end: end, text: parts[i]));
+        cursor = end;
+      }
+    }
+    return sorted(out);
   }
 
   /// Move a segment by [delta], clamped to [0, mediaDuration].

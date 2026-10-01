@@ -120,7 +120,7 @@ void main() {
       expect(ass.contains('[Script Info]'), isTrue);
       expect(ass.contains('PlayResX: 1080'), isTrue);
       expect(ass.contains('Dialogue:'), isTrue);
-      expect(ass.contains('NotoSansArabic'), isTrue);
+      expect(ass.contains('Noto Sans Arabic'), isTrue);
     });
   });
 

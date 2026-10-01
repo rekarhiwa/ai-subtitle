@@ -303,58 +303,38 @@ class WindowsVideoProcessingService implements VideoProcessingService {
     final meta = await getVideoMetadata(videoPath);
     onProgress?.call(0.02, 'Burning subtitles…');
 
-    // Escape path for ass filter on Windows.
     final escapedAss = assPath
         .replaceAll(r'\', r'/')
         .replaceAll(':', r'\:')
         .replaceAll("'", r"\'");
 
-    var filter = "ass='$escapedAss'";
+    String? escapedFonts;
     if (fontsDir != null && fontsDir.isNotEmpty) {
-      final escapedFonts = fontsDir
+      escapedFonts = fontsDir
           .replaceAll(r'\', r'/')
           .replaceAll(':', r'\:')
           .replaceAll("'", r"\'");
-      filter = "ass='$escapedAss':fontsdir='$escapedFonts'";
     }
 
-    final result = await _run(
-      ffmpeg,
-      [
-        '-y',
-        '-i',
-        videoPath,
-        '-vf',
-        filter,
-        '-c:v',
-        'libx264',
-        '-preset',
-        quality.preset,
-        '-crf',
-        '${quality.crf}',
-        '-c:a',
-        'copy',
-        '-movflags',
-        '+faststart',
-        outputPath,
-      ],
-      onProgress: onProgress,
-      totalDuration: meta.duration,
-    );
+    final filters = <String>[
+      if (escapedFonts != null) "ass='$escapedAss':fontsdir='$escapedFonts'",
+      "ass='$escapedAss'",
+      if (escapedFonts != null)
+        "subtitles='$escapedAss':fontsdir='$escapedFonts'",
+      "subtitles='$escapedAss'",
+    ];
 
-    if (result.exitCode != 0 || !await File(outputPath).exists()) {
-      // Fallback: subtitles filter (libass) with force_style omitted.
-      final fallbackFilter = fontsDir == null
-          ? "subtitles='${assPath.replaceAll(r'\', r'/').replaceAll(':', r'\:')}'"
-          : "subtitles='${assPath.replaceAll(r'\', r'/').replaceAll(':', r'\:')}':fontsdir='${fontsDir.replaceAll(r'\', r'/').replaceAll(':', r'\:')}'";
-      final retry = await _run(
+    Object? lastError;
+    for (final filter in filters) {
+      if (_cancelled) throw AppException.exportCancelled();
+      final result = await _run(
         ffmpeg,
         [
           '-y',
           '-i',
           videoPath,
           '-vf',
-          fallbackFilter,
+          filter,
           '-c:v',
           'libx264',
           '-preset',
@@ -362,7 +342,9 @@ class WindowsVideoProcessingService implements VideoProcessingService {
           '-crf',
           '${quality.crf}',
           '-c:a',
-          'copy',
+          'aac',
+          '-b:a',
+          '128k',
           '-movflags',
           '+faststart',
           outputPath,
@@ -370,14 +352,257 @@ class WindowsVideoProcessingService implements VideoProcessingService {
         onProgress: onProgress,
         totalDuration: meta.duration,
       );
-      if (retry.exitCode != 0 || !await File(outputPath).exists()) {
-        throw AppException.ffmpegFailed(
-          (retry.stderr as String).split('\n').where((l) => l.trim().isNotEmpty).lastOrNull ??
-              'subtitle burn-in failed',
-        );
+      if (result.exitCode == 0 && await File(outputPath).exists()) {
+        onProgress?.call(1.0, 'Export complete');
+        return outputPath;
+      }
+      lastError = (result.stderr as String)
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .lastOrNull;
+      _log.warning('Burn filter failed ($filter): $lastError');
+    }
+
+    throw AppException.ffmpegFailed(
+      lastError?.toString() ?? 'subtitle burn-in failed',
+    );
+  }
+
+  @override
+  Future<String> trimAndConcat({
+    required List<TimelineSegmentSpec> segments,
+    required String outputPath,
+    required ExportQuality quality,
+    required String workDir,
+    ProgressCallback? onProgress,
+  }) async {
+    _cancelled = false;
+    if (segments.isEmpty) {
+      throw AppException.ffmpegFailed('No video clips to export');
+    }
+    final ffmpeg = await _resolveFfmpeg();
+    onProgress?.call(0.02, 'Preparing clips…');
+    final partPaths = <String>[];
+    for (var i = 0; i < segments.length; i++) {
+      if (_cancelled) throw AppException.exportCancelled();
+      final seg = segments[i];
+      final part = p.join(workDir, 'part_$i.mp4');
+      final ss = (seg.inPoint.inMilliseconds / 1000.0).toStringAsFixed(3);
+      final to = (seg.outPoint.inMilliseconds / 1000.0).toStringAsFixed(3);
+      final result = await _run(
+        ffmpeg,
+        [
+          '-y',
+          '-ss',
+          ss,
+          '-to',
+          to,
+          '-i',
+          seg.path,
+          '-c:v',
+          'libx264',
+          '-preset',
+          quality.preset,
+          '-crf',
+          '${quality.crf}',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          '-movflags',
+          '+faststart',
+          part,
+        ],
+        onProgress: (pr, _) => onProgress?.call(
+          0.05 + (i + pr) / segments.length * 0.7,
+          'Encoding clip ${i + 1}/${segments.length}…',
+        ),
+        totalDuration: seg.outPoint - seg.inPoint,
+      );
+      if (result.exitCode != 0 || !await File(part).exists()) {
+        throw AppException.ffmpegFailed('Failed encoding clip ${i + 1}');
+      }
+      partPaths.add(part);
+    }
+
+    if (partPaths.length == 1) {
+      await File(partPaths.first).copy(outputPath);
+      onProgress?.call(1.0, 'Clips ready');
+      return outputPath;
+    }
+
+    onProgress?.call(0.8, 'Concatenating…');
+    final listFile = p.join(workDir, 'concat.txt');
+    final listBody =
+        partPaths.map((e) => "file '${e.replaceAll(r'\', '/')}'").join('\n');
+    await File(listFile).writeAsString(listBody, flush: true);
+    var result = await _run(
+      ffmpeg,
+      [
+        '-y',
+        '-f',
+        'concat',
+        '-safe',
+        '0',
+        '-i',
+        listFile,
+        '-c',
+        'copy',
+        outputPath,
+      ],
+    );
+    if (result.exitCode != 0 || !await File(outputPath).exists()) {
+      result = await _run(
+        ffmpeg,
+        [
+          '-y',
+          '-f',
+          'concat',
+          '-safe',
+          '0',
+          '-i',
+          listFile,
+          '-c:v',
+          'libx264',
+          '-preset',
+          quality.preset,
+          '-crf',
+          '${quality.crf}',
+          '-c:a',
+          'aac',
+          '-movflags',
+          '+faststart',
+          outputPath,
+        ],
+      );
+      if (result.exitCode != 0 || !await File(outputPath).exists()) {
+        throw AppException.ffmpegFailed('Concat failed');
       }
     }
-    onProgress?.call(1.0, 'Export complete');
+    onProgress?.call(1.0, 'Clips ready');
+    return outputPath;
+  }
+
+  @override
+  Future<String> mixBackgroundAudio({
+    required String videoPath,
+    required String audioPath,
+    required String outputPath,
+    double videoVolume = 1.0,
+    double audioVolume = 0.8,
+    Duration audioDelay = Duration.zero,
+    bool muteOriginal = false,
+    ProgressCallback? onProgress,
+  }) async {
+    _cancelled = false;
+    final ffmpeg = await _resolveFfmpeg();
+    onProgress?.call(0.05, 'Mixing audio…');
+    final delayMs = audioDelay.inMilliseconds;
+    final filter = muteOriginal
+        ? '[1:a]volume=$audioVolume,adelay=$delayMs|$delayMs[aout]'
+        : '[0:a]volume=$videoVolume[a0];[1:a]volume=$audioVolume,adelay=$delayMs|$delayMs[a1];'
+            '[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]';
+    final result = await _run(
+      ffmpeg,
+      [
+        '-y',
+        '-i',
+        videoPath,
+        '-i',
+        audioPath,
+        '-filter_complex',
+        filter,
+        '-map',
+        '0:v',
+        '-map',
+        '[aout]',
+        '-c:v',
+        'copy',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '160k',
+        '-shortest',
+        '-movflags',
+        '+faststart',
+        outputPath,
+      ],
+      onProgress: onProgress,
+    );
+    if (result.exitCode != 0 || !await File(outputPath).exists()) {
+      throw AppException.ffmpegFailed('Audio mix failed');
+    }
+    onProgress?.call(1.0, 'Audio mixed');
+    return outputPath;
+  }
+
+  @override
+  Future<String> generateTone({
+    required String lavfiSource,
+    required String outputPath,
+    ProgressCallback? onProgress,
+  }) async {
+    final ffmpeg = await _resolveFfmpeg();
+    onProgress?.call(0.1, 'Generating tone…');
+    final result = await _run(
+      ffmpeg,
+      [
+        '-y',
+        '-f',
+        'lavfi',
+        '-i',
+        lavfiSource,
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        outputPath,
+      ],
+      onProgress: onProgress,
+    );
+    if (result.exitCode != 0 || !await File(outputPath).exists()) {
+      throw AppException.ffmpegFailed('Tone generation failed');
+    }
+    onProgress?.call(1.0, 'Tone ready');
+    return outputPath;
+  }
+
+  @override
+  Future<String> exportGif({
+    required String videoPath,
+    required String outputPath,
+    Duration start = Duration.zero,
+    Duration duration = const Duration(seconds: 3),
+    int width = 480,
+    ProgressCallback? onProgress,
+  }) async {
+    final ffmpeg = await _resolveFfmpeg();
+    onProgress?.call(0.05, 'Exporting GIF…');
+    final ss = (start.inMilliseconds / 1000.0).toStringAsFixed(2);
+    final t = (duration.inMilliseconds / 1000.0).toStringAsFixed(2);
+    final result = await _run(
+      ffmpeg,
+      [
+        '-y',
+        '-ss',
+        ss,
+        '-t',
+        t,
+        '-i',
+        videoPath,
+        '-vf',
+        'fps=12,scale=$width:-1:flags=lanczos',
+        '-loop',
+        '0',
+        outputPath,
+      ],
+      onProgress: onProgress,
+      totalDuration: duration,
+    );
+    if (result.exitCode != 0 || !await File(outputPath).exists()) {
+      throw AppException.ffmpegFailed('GIF export failed');
+    }
+    onProgress?.call(1.0, 'GIF ready');
     return outputPath;
   }
 }

@@ -1,7 +1,8 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// CapCut-accurate dark studio palette (black canvas, white CTA, yellow playhead).
+/// CapCut-like montage palette: black canvas, white CTA, teal brand, yellow playhead.
 class AppColors {
   AppColors._();
 
@@ -15,6 +16,7 @@ class AppColors {
   static const accent = Color(0xFFFF2D55);
   static const accentSoft = Color(0x33FF2D55);
   static const brand = Color(0xFF00E5C0);
+  static const brandSoft = Color(0x2200E5C0);
   static const textPrimary = Color(0xFFFFFFFF);
   static const textSecondary = Color(0xFF8E8E93);
   static const textMuted = Color(0xFF636366);
@@ -27,6 +29,27 @@ class AppColors {
   static const timelineClipActive = Color(0xFFFFD60A);
   static const playhead = Color(0xFFFFD60A);
   static const exportButton = Color(0xFFFFFFFF);
+}
+
+/// Spacing / radius tokens for consistent montage UI.
+class AppSpace {
+  AppSpace._();
+
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+}
+
+class AppRadius {
+  AppRadius._();
+
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 20;
+  static const double pill = 999;
 }
 
 class AppTheme {
@@ -48,6 +71,15 @@ class AppTheme {
         onError: Colors.white,
       ),
       scaffoldBackgroundColor: AppColors.background,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+        },
+      ),
     );
 
     return base.copyWith(
@@ -69,7 +101,7 @@ class AppTheme {
         color: AppColors.surfaceElevated,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -96,23 +128,25 @@ class AppTheme {
           backgroundColor: AppColors.exportButton,
           foregroundColor: Colors.black,
           elevation: 0,
-          minimumSize: const Size(120, 44),
+          minimumSize: const Size(120, 48),
           textStyle: const TextStyle(
             fontWeight: FontWeight.w800,
-            fontSize: 14,
+            fontSize: 15,
             fontFamily: 'NotoSansArabic',
           ),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
           side: const BorderSide(color: AppColors.border),
-          minimumSize: const Size(100, 44),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          minimumSize: const Size(100, 48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -133,11 +167,16 @@ class AppTheme {
         backgroundColor: AppColors.surfaceElevated,
         contentTextStyle: const TextStyle(color: AppColors.textPrimary),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface,
         modalBackgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surfaceSoft,
@@ -145,7 +184,9 @@ class AppTheme {
         labelStyle: const TextStyle(fontWeight: FontWeight.w700),
         secondaryLabelStyle: const TextStyle(color: Colors.black),
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
       ),
     );
   }

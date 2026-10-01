@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/utils/timestamp_utils.dart';
+import '../../models/sticker_item.dart';
 import '../../models/subtitle_segment.dart';
 import '../../models/subtitle_style.dart';
 
@@ -27,6 +28,7 @@ class SubtitleExportService {
     required SubtitleStyle style,
     required int videoWidth,
     required int videoHeight,
+    List<StickerItem> stickers = const [],
   }) {
     final sorted = [...segments]..sort((a, b) => a.start.compareTo(b.start));
     final playResX = videoWidth <= 0 ? 1920 : videoWidth;
@@ -63,9 +65,14 @@ class SubtitleExportService {
         'Alignment, MarginL, MarginR, MarginV, Encoding',
       )
       ..writeln(
-        'Style: Default,${style.fontFamily},$fontSize,$primary,$primary,'
+        'Style: Default,${_assFontName(style.fontFamily)},$fontSize,$primary,$primary,'
         '$outline,$shadow,$bold,0,0,0,100,100,${style.letterSpacing},0,'
         '1,$outlineWidth,$shadowDepth,2,$marginL,$marginR,$marginV,1',
+      )
+      ..writeln(
+        'Style: Sticker,Segoe UI Emoji,72,&H00FFFFFF,&H00FFFFFF,'
+        '&H00000000,&H80000000,0,0,0,0,100,100,0,0,'
+        '1,0,0,5,0,0,0,1',
       )
       ..writeln()
       ..writeln('[Events]')
@@ -84,6 +91,17 @@ class SubtitleExportService {
       );
     }
 
+    for (final sticker in stickers) {
+      final px = (sticker.x * playResX).round();
+      final py = (sticker.y * playResY).round();
+      final scale = (sticker.scale * 100).round().clamp(40, 250);
+      buffer.writeln(
+        'Dialogue: 1,${TimestampUtils.toAss(sticker.start)},'
+        '${TimestampUtils.toAss(sticker.end)},Sticker,,0,0,0,,'
+        '{\\pos($px,$py)\\fscx$scale\\fscy$scale}${sticker.emoji}',
+      );
+    }
+
     return buffer.toString();
   }
 
@@ -99,5 +117,17 @@ class SubtitleExportService {
             '${g.toRadixString(16).padLeft(2, '0')}'
             '${r.toRadixString(16).padLeft(2, '0')}')
         .toUpperCase();
+  }
+
+  /// Map Flutter font family → libass font family name.
+  String _assFontName(String family) {
+    switch (family) {
+      case 'NotoSansArabic':
+        return 'Noto Sans Arabic';
+      case 'sans-serif':
+        return 'sans-serif';
+      default:
+        return family;
+    }
   }
 }

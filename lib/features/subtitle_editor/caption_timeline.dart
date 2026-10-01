@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../models/audio_clip.dart';
 import '../../models/subtitle_segment.dart';
+import '../../models/video_clip.dart';
+import 'clip_ops.dart';
 import 'subtitle_ops.dart';
 
-/// CapCut-style dual track: video filmstrip + editable caption clips.
+/// CapCut-style multi-track: video clips + captions + audio.
 class CaptionTimeline extends StatefulWidget {
   const CaptionTimeline({
     super.key,
@@ -18,8 +21,13 @@ class CaptionTimeline extends StatefulWidget {
     required this.onSeek,
     required this.onSelect,
     required this.onSegmentsChanged,
+    this.videoClips = const [],
+    this.audioClips = const [],
+    this.activeClipId,
+    this.onSelectClip,
+    this.onClipsChanged,
     this.thumbnailPath,
-    this.height = 168,
+    this.height = 196,
   });
 
   static const minPps = 24.0;
@@ -27,13 +35,18 @@ class CaptionTimeline extends StatefulWidget {
   static const pad = 16.0;
 
   final List<SubtitleSegment> segments;
+  final List<VideoClip> videoClips;
+  final List<AudioClip> audioClips;
   final Duration position;
   final Duration duration;
   final String? activeId;
+  final String? activeClipId;
   final String? thumbnailPath;
   final ValueChanged<Duration> onSeek;
   final ValueChanged<SubtitleSegment> onSelect;
   final ValueChanged<List<SubtitleSegment>> onSegmentsChanged;
+  final ValueChanged<VideoClip>? onSelectClip;
+  final ValueChanged<List<VideoClip>>? onClipsChanged;
   final double height;
 
   @override
@@ -117,25 +130,61 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
     return Container(
       height: widget.height,
       color: AppColors.timelineTrack,
-      child: Column(
+      child: Row(
         children: [
           SizedBox(
-            height: 34,
+            width: 28,
+            child: Column(
+              children: [
+                const SizedBox(height: 28),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: const [
+                      Text('V',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textMuted)),
+                      Text('C',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.timelineClip)),
+                      Text('A',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF30D158))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+        children: [
+          SizedBox(
+            height: 28,
             child: Row(
               children: [
-                const SizedBox(width: 10),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Zoom out',
-                  onPressed: () => _zoomTo(_pps * 0.8),
-                  icon: const Icon(Icons.remove_circle_outline, size: 18),
+                const SizedBox(width: 6),
+                _ZoomIcon(
+                  icon: Icons.remove,
+                  onTap: () => _zoomTo(_pps * 0.8),
                 ),
                 Expanded(
                   child: SliderTheme(
                     data: SliderTheme.of(context).copyWith(
-                      trackHeight: 2,
+                      trackHeight: 1.5,
+                      activeTrackColor: AppColors.textMuted,
+                      inactiveTrackColor: AppColors.border,
+                      thumbColor: Colors.white,
                       thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          const RoundSliderThumbShape(enabledThumbRadius: 5),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 10),
                     ),
                     child: Slider(
                       min: CaptionTimeline.minPps,
@@ -151,24 +200,11 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                     ),
                   ),
                 ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Zoom in',
-                  onPressed: () => _zoomTo(_pps * 1.25),
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                _ZoomIcon(
+                  icon: Icons.add,
+                  onTap: () => _zoomTo(_pps * 1.25),
                 ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () =>
-                      setState(() => _followPlayhead = !_followPlayhead),
-                  icon: Icon(
-                    _followPlayhead ? Icons.lock_outline : Icons.lock_open,
-                    size: 18,
-                    color: _followPlayhead
-                        ? AppColors.playhead
-                        : AppColors.textSecondary,
-                  ),
-                ),
+                const SizedBox(width: 4),
               ],
             ),
           ),
@@ -205,12 +241,12 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                             ),
                           ),
                         ),
-                        // Video track (filmstrip)
+                        // Video track (filmstrip + clip borders)
                         Positioned(
                           left: CaptionTimeline.pad,
                           right: CaptionTimeline.pad,
                           top: 18,
-                          height: 44,
+                          height: 40,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: _Filmstrip(
@@ -222,12 +258,40 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                             ),
                           ),
                         ),
+                        for (final clip in ClipOps.sorted(widget.videoClips))
+                          Positioned(
+                            left: _xFor(clip.timelineStart),
+                            width: (_xFor(clip.timelineEnd) -
+                                    _xFor(clip.timelineStart))
+                                .clamp(12.0, _totalWidth),
+                            top: 18,
+                            height: 40,
+                            child: GestureDetector(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                widget.onSelectClip?.call(clip);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: clip.id == widget.activeClipId
+                                        ? AppColors.brand
+                                        : Colors.white24,
+                                    width: clip.id == widget.activeClipId
+                                        ? 2
+                                        : 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         // Caption lane bg
                         Positioned(
                           left: CaptionTimeline.pad,
                           right: CaptionTimeline.pad,
-                          top: 70,
-                          bottom: 8,
+                          top: 64,
+                          height: 40,
                           child: Container(
                             decoration: BoxDecoration(
                               color: AppColors.surfaceElevated,
@@ -235,6 +299,57 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                             ),
                           ),
                         ),
+                        // Audio lane
+                        Positioned(
+                          left: CaptionTimeline.pad,
+                          right: CaptionTimeline.pad,
+                          top: 110,
+                          height: 28,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSoft,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.only(left: 8),
+                            child: widget.audioClips.isEmpty
+                                ? const Text(
+                                    'Audio',
+                                    style: TextStyle(
+                                      color: AppColors.textMuted,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                        for (final a in widget.audioClips)
+                          Positioned(
+                            left: _xFor(a.timelineStart),
+                            width: (_xFor(a.timelineEnd) -
+                                    _xFor(a.timelineStart))
+                                .clamp(16.0, _totalWidth),
+                            top: 112,
+                            height: 24,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF30D158),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                a.fileName.isEmpty ? 'Music' : a.fileName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
                         // Empty seek
                         Positioned.fill(
                           child: GestureDetector(
@@ -255,8 +370,8 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                             left: _xFor(s.start),
                             width: (_xFor(s.end) - _xFor(s.start))
                                 .clamp(18.0, _totalWidth),
-                            top: 74,
-                            bottom: 12,
+                            top: 66,
+                            bottom: 48,
                             pps: _pps,
                             mediaDuration: widget.duration,
                             onSelect: () {
@@ -278,6 +393,19 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                                 ),
                               );
                             },
+                          ),
+                        if (sorted.isEmpty)
+                          Positioned(
+                            left: CaptionTimeline.pad + 12,
+                            top: 74,
+                            child: const Text(
+                              'Captions lane · Auto Captions or Add in Text',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         // Playhead
                         Positioned(
@@ -307,6 +435,9 @@ class _CaptionTimelineState extends State<CaptionTimeline> {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
           ),
         ],
       ),
@@ -634,4 +765,24 @@ class _RulerPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RulerPainter oldDelegate) =>
       oldDelegate.pps != pps || oldDelegate.duration != duration;
+}
+
+class _ZoomIcon extends StatelessWidget {
+  const _ZoomIcon({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        width: 28,
+        height: 28,
+        child: Icon(icon, size: 16, color: AppColors.textSecondary),
+      ),
+    );
+  }
 }

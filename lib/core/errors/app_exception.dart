@@ -43,9 +43,14 @@ class AppException implements Exception {
 
   factory AppException.transcriptionFailed([String? detail]) => AppException(
         detail == null
-            ? 'Transcription failed. Please try again.'
-            : 'Transcription failed: $detail',
+            ? 'AI captions failed. Check video/subtitle language and try again. / ژێرنووس دروست نەبوو — زمانەکان بپشکنە.'
+            : 'AI captions failed: $detail',
         code: 'transcription_failed',
+      );
+
+  factory AppException.languageMismatch() => AppException(
+        'Source and subtitle language look wrong for this audio. Pick spoken language + subtitle language, then retry.',
+        code: 'language_mismatch',
       );
 
   factory AppException.exportCancelled() => AppException(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/timestamp_utils.dart';
 
+/// CapCut-style play strip under preview (no scrubber — playhead lives on timeline).
 class EditorTransport extends StatelessWidget {
   const EditorTransport({
     super.key,
@@ -21,41 +22,49 @@ class EditorTransport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxMs = duration.inMilliseconds.clamp(1, 1 << 62).toDouble();
     return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.fromLTRB(4, 2, 8, 0),
+      height: 40,
+      color: AppColors.background,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: onPlayPause,
-            icon: Icon(
-              playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+          GestureDetector(
+            onTap: onPlayPause,
+            child: Icon(
+              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 28,
             ),
-            color: AppColors.brand,
-            iconSize: 34,
           ),
+          const SizedBox(width: 10),
           Text(
-            '${TimestampUtils.toUi(position)} / ${TimestampUtils.toUi(duration)}',
+            TimestampUtils.toUi(position),
             style: const TextStyle(
               fontSize: 12,
               fontFeatures: [FontFeature.tabularFigures()],
-              color: AppColors.textSecondary,
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 2.5,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              ),
-              child: Slider(
-                value: position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble(),
-                max: maxMs,
-                onChanged: (v) => onSeek(Duration(milliseconds: v.round())),
-              ),
+          Text(
+            ' / ${TimestampUtils.toUi(duration)}',
+            style: const TextStyle(
+              fontSize: 12,
+              fontFeatures: [FontFeature.tabularFigures()],
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: '−1s',
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              final next = position - const Duration(seconds: 1);
+              onSeek(next < Duration.zero ? Duration.zero : next);
+            },
+            icon: const Icon(Icons.replay_rounded, size: 18),
+            color: AppColors.textSecondary,
           ),
         ],
       ),

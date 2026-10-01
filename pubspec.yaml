@@ -1,5 +1,5 @@
 name: ai_subtitle
-description: Local AI video subtitles for Kurdish Sorani — FFmpeg + Gemini.
+description: Easy montage studio with Kurdish AI captions — FFmpeg + Gemini.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -31,6 +31,7 @@ dependencies:
   open_filex: ^4.7.0
   share_plus: ^13.3.0
   ffmpeg_kit_flutter_new: ^4.6.2
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:
