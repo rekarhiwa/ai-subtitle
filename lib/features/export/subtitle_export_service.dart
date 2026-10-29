@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/utils/timestamp_utils.dart';
 import '../../models/sticker_item.dart';
+import '../../models/subtitle_animation_config.dart';
 import '../../models/subtitle_segment.dart';
 import '../../models/subtitle_style.dart';
+import 'subtitle_layout.dart';
 
 class SubtitleExportService {
   /// Generate SRT content.
@@ -22,13 +24,14 @@ class SubtitleExportService {
     return buffer.toString();
   }
 
-  /// Generate ASS content from [SubtitleStyle] for burn-in export.
+  /// Generate ASS for burn-in. Center `\pos` matches Flutter preview anchor.
   String toAss({
     required List<SubtitleSegment> segments,
     required SubtitleStyle style,
     required int videoWidth,
     required int videoHeight,
     List<StickerItem> stickers = const [],
+    SubtitleAnimationConfig animation = SubtitleAnimationConfig.none,
   }) {
     final sorted = [...segments]..sort((a, b) => a.start.compareTo(b.start));
     final playResX = videoWidth <= 0 ? 1920 : videoWidth;
@@ -38,15 +41,16 @@ class SubtitleExportService {
     final outline = _assColor(style.outlineColor);
     final shadow = _assColor(style.shadowColor);
 
-    final marginV =
-        ((1.0 - style.positionY) * playResY).round().clamp(0, playResY);
-    final marginL =
-        ((1.0 - style.maxWidth) / 2 * playResX).round().clamp(0, playResX);
-    final marginR = marginL;
     final bold = style.fontWeight.value >= FontWeight.w700.value ? -1 : 0;
-    final fontSize = style.fontSize.round();
-    final outlineWidth = style.outlineWidth;
+    final fontSize = style.fontSize.round().clamp(8, 400);
+    final outlineWidth = style.outlineWidth.clamp(0, 12);
     final shadowDepth = (style.shadowBlur / 3).clamp(0, 8).toDouble();
+    final stickerBase = SubtitleLayout.stickerBaseSize(playResY.toDouble())
+        .round()
+        .clamp(24, 200);
+
+    final posX = SubtitleLayout.assPosX(style, playResX);
+    final posY = SubtitleLayout.assPosY(style, playResY);
 
     final buffer = StringBuffer()
       ..writeln('[Script Info]')
@@ -67,10 +71,10 @@ class SubtitleExportService {
       ..writeln(
         'Style: Default,${_assFontName(style.fontFamily)},$fontSize,$primary,$primary,'
         '$outline,$shadow,$bold,0,0,0,100,100,${style.letterSpacing},0,'
-        '1,$outlineWidth,$shadowDepth,2,$marginL,$marginR,$marginV,1',
+        '1,$outlineWidth,$shadowDepth,5,0,0,0,1',
       )
       ..writeln(
-        'Style: Sticker,Segoe UI Emoji,72,&H00FFFFFF,&H00FFFFFF,'
+        'Style: Sticker,Segoe UI Emoji,$stickerBase,&H00FFFFFF,&H00FFFFFF,'
         '&H00000000,&H80000000,0,0,0,0,100,100,0,0,'
         '1,0,0,5,0,0,0,1',
       )
@@ -81,13 +85,17 @@ class SubtitleExportService {
       );
 
     for (final segment in sorted) {
-      final text = segment.text
-          .trim()
-          .replaceAll('\r\n', r'\N')
-          .replaceAll('\n', r'\N');
+      final text = _escapeAssText(segment.text.trim());
+      final tags = _dialogueTags(
+        animation: animation,
+        posX: posX,
+        posY: posY,
+        playResY: playResY,
+      );
       buffer.writeln(
         'Dialogue: 0,${TimestampUtils.toAss(segment.start)},'
-        '${TimestampUtils.toAss(segment.end)},Default,,0,0,0,,$text',
+        '${TimestampUtils.toAss(segment.end)},Default,,0,0,0,,'
+        '{$tags}$text',
       );
     }
 
@@ -98,11 +106,51 @@ class SubtitleExportService {
       buffer.writeln(
         'Dialogue: 1,${TimestampUtils.toAss(sticker.start)},'
         '${TimestampUtils.toAss(sticker.end)},Sticker,,0,0,0,,'
-        '{\\pos($px,$py)\\fscx$scale\\fscy$scale}${sticker.emoji}',
+        '{\\an5\\pos($px,$py)\\fscx$scale\\fscy$scale}${sticker.emoji}',
       );
     }
 
     return buffer.toString();
+  }
+
+  String _escapeAssText(String text) {
+    return text
+        .replaceAll(r'\', r'\\')
+        .replaceAll('{', r'\{')
+        .replaceAll('}', r'\}')
+        .replaceAll('\r\n', r'\N')
+        .replaceAll('\n', r'\N');
+  }
+
+  String _dialogueTags({
+    required SubtitleAnimationConfig animation,
+    required int posX,
+    required int posY,
+    required int playResY,
+  }) {
+    final ms = animation.duration.inMilliseconds.clamp(80, 2000);
+    final scale = playResY / 1080.0;
+
+    switch (animation.type) {
+      case SubtitleAnimationType.none:
+        return '\\an5\\pos($posX,$posY)';
+      case SubtitleAnimationType.fade:
+      case SubtitleAnimationType.wordByWord:
+        return '\\an5\\pos($posX,$posY)\\fad($ms,$ms)';
+      case SubtitleAnimationType.pop:
+        final from = (animation.scaleFrom * 100).round().clamp(40, 100);
+        return '\\an5\\pos($posX,$posY)\\fad(${ms ~/ 2},${ms ~/ 2})'
+            '\\fscx$from\\fscy$from\\t(0,$ms,\\fscx100\\fscy100)';
+      case SubtitleAnimationType.slideUp:
+        final dy = (animation.offsetY.abs() * scale).round();
+        return '\\an5\\move($posX,${posY + dy},$posX,$posY,0,$ms)\\fad(${ms ~/ 2},${ms ~/ 2})';
+      case SubtitleAnimationType.slideLeft:
+        final dx = (animation.offsetX.abs() * scale).round();
+        return '\\an5\\move(${posX + dx},$posY,$posX,$posY,0,$ms)\\fad(${ms ~/ 2},${ms ~/ 2})';
+      case SubtitleAnimationType.slideRight:
+        final dx = (animation.offsetX.abs() * scale).round();
+        return '\\an5\\move(${posX - dx},$posY,$posX,$posY,0,$ms)\\fad(${ms ~/ 2},${ms ~/ 2})';
+    }
   }
 
   /// ASS colors are &HAABBGGRR (alpha inverted).
@@ -119,7 +167,6 @@ class SubtitleExportService {
         .toUpperCase();
   }
 
-  /// Map Flutter font family → libass font family name.
   String _assFontName(String family) {
     switch (family) {
       case 'NotoSansArabic':

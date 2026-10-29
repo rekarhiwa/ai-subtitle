@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/app_language.dart';
 import '../../models/export_quality.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/studio_widgets.dart';
 import '../subtitle_styles/subtitle_preset_catalog.dart';
 
@@ -125,7 +126,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Row(
+          children: [
+            AppLogo(size: 26),
+            SizedBox(width: 10),
+            Text('Settings'),
+          ],
+        ),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
@@ -272,10 +281,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         for (final q in ExportQuality.values) ...[
                           if (q != ExportQuality.values.first)
                             const SizedBox(width: 8),
-                          QualityChip(
-                            label: q.label,
-                            selected: _quality == q,
-                            onTap: () => setState(() => _quality = q),
+                          Expanded(
+                            child: QualityChip(
+                              label: q.label,
+                              selected: _quality == q,
+                              onTap: () => setState(() => _quality = q),
+                            ),
                           ),
                         ],
                       ],
@@ -291,7 +302,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+              const Center(child: AppLogo(size: 56)),
+              const SizedBox(height: 10),
               Text(
                 '${AppConfig.appName} · caption montage studio',
                 textAlign: TextAlign.center,

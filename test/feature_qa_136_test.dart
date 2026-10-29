@@ -92,6 +92,7 @@ void main() {
     'mute_original',
     'extract_audio',
     'open_text',
+    'generate_captions',
     'open_style',
     'templates',
     'open_animation',
@@ -211,7 +212,6 @@ String _verifyBehavior(
       if (c.trimmedDuration != const Duration(seconds: 2)) {
         return 'FAIL: speed duration';
       }
-      final sped = ClipOps.setSpeed([sampleClip()], sampleClip().id, 0.5);
       // id mismatch — use same clip
       final base = sampleClip();
       final out = ClipOps.setSpeed([base], base.id, 0.5);
@@ -482,7 +482,7 @@ String _verifyBehavior(
         text: 'hello world',
       );
       final split = SubtitleOps.split(segs, segs.first.id);
-      if (split.length < 1) return 'FAIL: transcript edit';
+      if (split.isEmpty) return 'FAIL: transcript edit';
       return 'transcript split partial';
     case 115:
       return 'AI credits partial (Gemini key storage)';

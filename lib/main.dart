@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/home_screen.dart';
+import 'widgets/app_logo.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +38,36 @@ class MontageApp extends StatelessWidget {
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      home: const HomeScreen(),
+      home: const _BootGate(),
+    );
+  }
+}
+
+class _BootGate extends StatefulWidget {
+  const _BootGate();
+
+  @override
+  State<_BootGate> createState() => _BootGateState();
+}
+
+class _BootGateState extends State<_BootGate> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      child: _ready
+          ? const HomeScreen(key: ValueKey('home'))
+          : const AppSplash(key: ValueKey('splash')),
     );
   }
 }

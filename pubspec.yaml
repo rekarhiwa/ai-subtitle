@@ -32,11 +32,24 @@ dependencies:
   share_plus: ^13.3.0
   ffmpeg_kit_flutter_new: ^4.6.2
   flutter_tts: ^4.2.5
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  windows:
+    generate: true
+    icon_path: assets/branding/logo_mark.png
+  image_path: assets/branding/logo_mark.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/branding/logo_mark.png
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
@@ -44,6 +57,7 @@ flutter:
   assets:
     - assets/prompts/transcription_prompt.txt
     - assets/fonts/
+    - assets/branding/
 
   fonts:
     - family: NotoSansArabic

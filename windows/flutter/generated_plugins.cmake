@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   ffmpeg_kit_flutter_new
   flutter_secure_storage_windows
   flutter_tts
+  gal
   media_kit_libs_windows_video
   media_kit_video
   share_plus

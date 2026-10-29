@@ -522,10 +522,38 @@ class EditorController extends Notifier<EditorState?> {
   final List<_EditorSnapshot> _redo = [];
   Timer? _autosave;
 
+  /// True while [SubtitleEditorScreen] is mounted (not just stale state).
+  bool _routeVisible = false;
+  bool get isRouteVisible => _routeVisible;
+
+  /// Bumped when leaving the editor or starting a new long job — stale
+  /// FFmpeg / Gemini callbacks must ignore outdated generations.
+  int _jobGen = 0;
+
   @override
   EditorState? build() {
     ref.onDispose(() => _autosave?.cancel());
     return null;
+  }
+
+  void setRouteVisible(bool visible) => _routeVisible = visible;
+
+  int beginJob() => ++_jobGen;
+
+  bool isJobCurrent(int gen) => gen == _jobGen && state != null;
+
+  /// Invalidate in-flight export/caption jobs without wiping UI mid-frame.
+  void cancelJobs() => _jobGen++;
+
+  /// Drop session only when the editor route is no longer visible — safe after
+  /// pop so a newly opened project is not cleared by a late dispose.
+  void clearSessionIfHidden() {
+    if (_routeVisible) return;
+    _jobGen++;
+    _autosave?.cancel();
+    _undo.clear();
+    _redo.clear();
+    state = null;
   }
 
   _EditorSnapshot _snap(EditorState s) => _EditorSnapshot(
@@ -895,11 +923,17 @@ class EditorController extends Notifier<EditorState?> {
   }
 
   void setActiveSegment(String? id) {
-    state = state?.copyWith(activeSegmentId: id, clearActive: id == null);
+    final current = state;
+    if (current == null) return;
+    if (current.activeSegmentId == id) return;
+    state = current.copyWith(activeSegmentId: id, clearActive: id == null);
   }
 
   void setActiveClip(String? id) {
-    state = state?.copyWith(activeClipId: id, clearClip: id == null);
+    final current = state;
+    if (current == null) return;
+    if (current.activeClipId == id) return;
+    state = current.copyWith(activeClipId: id, clearClip: id == null);
   }
 
   void applyPreset(String id) {
@@ -919,6 +953,73 @@ class EditorController extends Notifier<EditorState?> {
     state = state?.copyWith(
       style: style,
       canUndo: _undo.isNotEmpty,
+      canRedo: false,
+    );
+    _scheduleAutosave();
+  }
+
+  /// Live gesture updates — no undo stack spam.
+  void patchStyleLive(SubtitleStyle style) {
+    state = state?.copyWith(style: style);
+  }
+
+  /// Commit gesture: undo restores [before], current becomes [after].
+  void commitStyleGesture(SubtitleStyle before, SubtitleStyle after) {
+    final current = state;
+    if (current == null) return;
+    if (before.positionX == after.positionX &&
+        before.positionY == after.positionY &&
+        before.fontSize == after.fontSize) {
+      return;
+    }
+    _undo.add(_snap(current.copyWith(style: before)));
+    if (_undo.length > 40) _undo.removeAt(0);
+    _redo.clear();
+    state = current.copyWith(
+      style: after,
+      canUndo: true,
+      canRedo: false,
+    );
+    _scheduleAutosave();
+  }
+
+  void patchStickerLive(StickerItem sticker) {
+    final current = state;
+    if (current == null) return;
+    state = current.copyWith(
+      stickers: [
+        for (final s in current.stickers)
+          if (s.id == sticker.id) sticker else s,
+      ],
+    );
+  }
+
+  void commitStickerGesture(StickerItem before, StickerItem after) {
+    final current = state;
+    if (current == null) return;
+    if (before.x == after.x &&
+        before.y == after.y &&
+        before.scale == after.scale) {
+      return;
+    }
+    _undo.add(
+      _snap(
+        current.copyWith(
+          stickers: [
+            for (final s in current.stickers)
+              if (s.id == before.id) before else s,
+          ],
+        ),
+      ),
+    );
+    if (_undo.length > 40) _undo.removeAt(0);
+    _redo.clear();
+    state = current.copyWith(
+      stickers: [
+        for (final s in current.stickers)
+          if (s.id == after.id) after else s,
+      ],
+      canUndo: true,
       canRedo: false,
     );
     _scheduleAutosave();
@@ -946,9 +1047,12 @@ class EditorController extends Notifier<EditorState?> {
   }) async {
     final current = state;
     if (current == null) return;
+    final job = beginJob();
+    final projectId = current.projectId;
     final storage = ref.read(secureStorageProvider);
     final apiKey = await storage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
+      if (!isJobCurrent(job)) return;
       state = current.copyWith(
         errorMessage:
             'کلیدی Gemini لە Settings زیاد بکە پێش Auto Captions.',
@@ -967,6 +1071,7 @@ class EditorController extends Notifier<EditorState?> {
         progress: 0.05,
         message: 'دەرهێنانی دەنگ…',
         clearError: true,
+        jobGen: job,
       );
       final audioOut = await temp.createPath(
         'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
@@ -979,15 +1084,21 @@ class EditorController extends Notifier<EditorState?> {
             isExporting: true,
             progress: 0.05 + p * 0.25,
             message: msg,
+            jobGen: job,
           );
         },
       );
+      if (!isJobCurrent(job) || state?.projectId != projectId) {
+        await temp.delete(audioPath);
+        return;
+      }
       temp.track(audioPath);
 
       setExporting(
         isExporting: true,
         progress: 0.35,
         message: 'AI ژێرنووس…',
+        jobGen: job,
       );
 
       final result = await gemini.transcribeAudio(
@@ -1008,15 +1119,22 @@ class EditorController extends Notifier<EditorState?> {
             isExporting: true,
             progress: 0.35 + p * 0.6,
             message: msg,
+            jobGen: job,
           );
         },
       );
+
+      if (!isJobCurrent(job) || state?.projectId != projectId) {
+        await temp.delete(audioPath);
+        return;
+      }
 
       setSegments(result.segments);
       setExporting(
         isExporting: false,
         progress: 1,
         message: 'ژێرنووس ئامادەیە',
+        jobGen: job,
       );
       await temp.delete(audioPath);
     } catch (e) {
@@ -1024,6 +1142,7 @@ class EditorController extends Notifier<EditorState?> {
         isExporting: false,
         errorMessage: e.toString(),
         message: '',
+        jobGen: job,
       );
       rethrow;
     }
@@ -1036,7 +1155,9 @@ class EditorController extends Notifier<EditorState?> {
     String? lastExportPath,
     String? errorMessage,
     bool clearError = false,
+    int? jobGen,
   }) {
+    if (jobGen != null && !isJobCurrent(jobGen)) return;
     final current = state;
     if (current == null) return;
     state = current.copyWith(

@@ -34,59 +34,1042 @@ class EditorBottomDock extends StatelessWidget {
   final EditorTab tab;
   final ValueChanged<EditorTab> onTab;
 
+  /// CapCut primary toolbar — equal-width icons.
   static const _items = <(EditorTab, IconData, String)>[
     (EditorTab.edit, Icons.content_cut_rounded, 'Edit'),
+    (EditorTab.text, Icons.closed_caption_rounded, 'Text'),
+    (EditorTab.style, Icons.auto_awesome_outlined, 'Effect'),
     (EditorTab.audio, Icons.music_note_rounded, 'Audio'),
-    (EditorTab.text, Icons.text_fields_rounded, 'Text'),
-    (EditorTab.style, Icons.filter_vintage_outlined, 'Filters'),
-    (EditorTab.animation, Icons.auto_awesome, 'Effects'),
-    (EditorTab.stickers, Icons.sticky_note_2_outlined, 'Overlay'),
-    (EditorTab.ai, Icons.closed_caption_rounded, 'Captions'),
-    (EditorTab.tools, Icons.grid_view_rounded, 'Tools'),
-    (EditorTab.export, Icons.ios_share_rounded, 'Export'),
+    (EditorTab.stickers, Icons.layers_outlined, 'Overlay'),
+    (EditorTab.tools, Icons.apps_rounded, 'More'),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
-      color: const Color(0xFF0A0A0A),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        itemCount: _items.length,
-        itemBuilder: (context, i) {
-          final (t, icon, label) = _items[i];
-          final selected = tab == t;
-          return SizedBox(
-            width: 64,
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                onTab(t);
-              },
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 22,
-                    color: selected ? Colors.white : AppColors.textSecondary,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? Colors.white : AppColors.textMuted,
-                    ),
-                  ),
-                ],
+      height: 56,
+      decoration: const BoxDecoration(
+        color: Color(0xFF000000),
+        border: Border(top: BorderSide(color: Color(0xFF1A1A1A))),
+      ),
+      child: Row(
+        children: [
+          for (final item in _items)
+            Expanded(
+              child: _DockItem(
+                icon: item.$2,
+                label: item.$3,
+                selected: tab == item.$1 ||
+                    (item.$1 == EditorTab.tools && tab == EditorTab.ai) ||
+                    (item.$1 == EditorTab.style && tab == EditorTab.animation),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTab(item.$1);
+                },
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DockItem extends StatelessWidget {
+  const _DockItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? Colors.white : const Color(0xFF6B6B6B);
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 22, color: color),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.05,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              letterSpacing: -0.2,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// CapCut Level-1 toolbar for any dock tab: « back + section tools + optional panel.
+class CapCutTabContextBar extends ConsumerStatefulWidget {
+  const CapCutTabContextBar({
+    super.key,
+    required this.tab,
+    required this.editor,
+    required this.position,
+    required this.onBack,
+    required this.onSeek,
+    this.onOpenTab,
+    this.onAutoCaptions,
+    this.onImportSrt,
+    this.onImportMedia,
+    this.onExtractAudio,
+    this.onBackup,
+    this.onOpenExport,
+    this.onAddPreset,
+  });
+
+  final EditorTab tab;
+  final EditorState editor;
+  final Duration position;
+  final VoidCallback onBack;
+  final ValueChanged<Duration> onSeek;
+  final ValueChanged<EditorTab>? onOpenTab;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback? onImportSrt;
+  final VoidCallback? onImportMedia;
+  final VoidCallback? onExtractAudio;
+  final VoidCallback? onBackup;
+  final VoidCallback? onOpenExport;
+  final Future<void> Function(MediaPreset preset)? onAddPreset;
+
+  @override
+  ConsumerState<CapCutTabContextBar> createState() =>
+      _CapCutTabContextBarState();
+}
+
+/// CapCut Text sub-modes: hub chooser → edit captions list → style.
+enum _TextSub { hub, edit, style }
+
+/// Edit-only wrapper kept for call-site clarity.
+class CapCutEditContextBar extends StatelessWidget {
+  const CapCutEditContextBar({
+    super.key,
+    required this.editor,
+    required this.position,
+    required this.onBack,
+    required this.onSeek,
+    this.onAutoCaptions,
+    this.onImportSrt,
+    this.onImportMedia,
+    this.onExtractAudio,
+    this.onBackup,
+    this.onOpenExport,
+    this.onAddPreset,
+  });
+
+  final EditorState editor;
+  final Duration position;
+  final VoidCallback onBack;
+  final ValueChanged<Duration> onSeek;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback? onImportSrt;
+  final VoidCallback? onImportMedia;
+  final VoidCallback? onExtractAudio;
+  final VoidCallback? onBackup;
+  final VoidCallback? onOpenExport;
+  final Future<void> Function(MediaPreset preset)? onAddPreset;
+
+  @override
+  Widget build(BuildContext context) {
+    return CapCutTabContextBar(
+      tab: EditorTab.edit,
+      editor: editor,
+      position: position,
+      onBack: onBack,
+      onSeek: onSeek,
+      onAutoCaptions: onAutoCaptions,
+      onImportSrt: onImportSrt,
+      onImportMedia: onImportMedia,
+      onExtractAudio: onExtractAudio,
+      onBackup: onBackup,
+      onOpenExport: onOpenExport,
+      onAddPreset: onAddPreset,
+    );
+  }
+}
+
+enum _CtxTool {
+  none,
+  volume,
+  fade,
+  speed,
+  opacity,
+  crop,
+  rotate,
+  transition,
+  fontSize,
+  positionY,
+}
+
+class _CapCutTabContextBarState extends ConsumerState<CapCutTabContextBar> {
+  _CtxTool _tool = _CtxTool.none;
+  bool _panelOpen = true;
+  _TextSub _textSub = _TextSub.hub;
+
+  @override
+  void didUpdateWidget(covariant CapCutTabContextBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tab != widget.tab) {
+      _tool = _CtxTool.none;
+      _panelOpen = widget.tab != EditorTab.edit;
+      if (widget.tab == EditorTab.text) {
+        _textSub = widget.editor.segments.isEmpty
+            ? _TextSub.hub
+            : (widget.editor.activeSegmentId != null
+                ? _TextSub.edit
+                : _TextSub.hub);
+      }
+    } else if (widget.tab == EditorTab.text) {
+      // CapCut: selecting a caption clip jumps into Edit captions.
+      final prevId = oldWidget.editor.activeSegmentId;
+      final nextId = widget.editor.activeSegmentId;
+      if (nextId != null && nextId != prevId && _textSub == _TextSub.hub) {
+        _textSub = _TextSub.edit;
+        _panelOpen = true;
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _panelOpen = widget.tab != EditorTab.edit;
+    if (widget.tab == EditorTab.text) {
+      _textSub = widget.editor.segments.isEmpty
+          ? _TextSub.hub
+          : (widget.editor.activeSegmentId != null
+              ? _TextSub.edit
+              : _TextSub.hub);
+    }
+  }
+
+  double get _panelHeight => switch (widget.tab) {
+        EditorTab.text => switch (_textSub) {
+            _TextSub.hub => 168.0,
+            _TextSub.edit => 260.0,
+            _TextSub.style => 240.0,
+          },
+        EditorTab.style || EditorTab.animation => 240.0,
+        EditorTab.audio => 200.0,
+        EditorTab.stickers => 180.0,
+        EditorTab.tools || EditorTab.ai => 240.0,
+        _ => 0.0,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final editor = widget.editor;
+    final position = widget.position;
+    final notifier = ref.read(editorControllerProvider.notifier);
+    VideoClip? atPos;
+    for (final c in editor.videoClips) {
+      if (c.id == editor.activeClipId) {
+        atPos = c;
+        break;
+      }
+    }
+    atPos ??= ClipOps.atPosition(editor.videoClips, position);
+
+    void patch(VideoClip Function(VideoClip) fn) {
+      if (atPos == null) return;
+      notifier.setActiveClip(atPos.id);
+      notifier.setVideoClips(ClipOps.update(editor.videoClips, atPos.id, fn));
+    }
+
+    final sliderH = _tool == _CtxTool.none ? 0.0 : 52.0;
+    final showPanel = _panelOpen && _panelHeight > 0;
+
+    return ColoredBox(
+      color: const Color(0xFF121212),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showPanel)
+            SizedBox(
+              height: _panelHeight,
+              child: _sectionPanel(editor, position, notifier),
+            ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: sliderH,
+            child: sliderH == 0
+                ? const SizedBox.shrink()
+                : _ctxSlider(editor, atPos, patch, notifier),
+          ),
+          SizedBox(
+            height: 72,
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    widget.onBack();
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: 44,
+                    height: 72,
+                    child: Icon(
+                      Icons.keyboard_double_arrow_left_rounded,
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(right: 8),
+                    children: _toolsForTab(editor, position, atPos, patch, notifier),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionPanel(
+    EditorState editor,
+    Duration position,
+    EditorController notifier,
+  ) {
+    final fonts = ref.watch(fontServiceProvider).availableFonts;
+    SubtitleSegment? active;
+    for (final s in editor.segments) {
+      if (s.id == editor.activeSegmentId) {
+        active = s;
+        break;
+      }
+    }
+    active ??= SubtitleOps.activeAt(editor.segments, position);
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: Color(0xFF0E0E0E),
+        border: Border(bottom: BorderSide(color: Color(0xFF1C1C1C))),
+      ),
+      child: switch (widget.tab) {
+        EditorTab.text => switch (_textSub) {
+            _TextSub.hub => _CapCutTextHub(
+                exporting: editor.isExporting,
+                hasCaptions: editor.segments.isNotEmpty,
+                onAddText: () => _addManualText(notifier, position),
+                onAutoCaptions: widget.onAutoCaptions,
+                onTemplates: () => setState(() {
+                      _textSub = _TextSub.style;
+                      _panelOpen = true;
+                    }),
+                onImportSrt: widget.onImportSrt,
+                onEditCaptions: editor.segments.isEmpty
+                    ? null
+                    : () => setState(() {
+                          _textSub = _TextSub.edit;
+                          _panelOpen = true;
+                        }),
+              ),
+            _TextSub.edit => CaptionTextPanel(
+                segments: editor.segments,
+                activeId: active?.id ?? editor.activeSegmentId,
+                mediaDuration: editor.timelineDuration,
+                exporting: editor.isExporting,
+                showToolbar: false,
+                onTap: (s) {
+                  notifier.setActiveSegment(s.id);
+                  widget.onSeek(s.start);
+                },
+                onChanged: notifier.updateSegment,
+                onDelete: (id) => notifier.setSegments(
+                  SubtitleOps.delete(editor.segments, id),
+                ),
+                onSplit: (id) => notifier.setSegments(
+                  SubtitleOps.split(editor.segments, id),
+                ),
+                onMergeNext: (id) {
+                  final sorted = SubtitleOps.sorted(editor.segments);
+                  final i = sorted.indexWhere((s) => s.id == id);
+                  if (i < 0 || i >= sorted.length - 1) return;
+                  notifier.setSegments(
+                    SubtitleOps.merge(sorted, sorted[i].id, sorted[i + 1].id),
+                  );
+                },
+                onAdd: () => _addManualText(notifier, position),
+                onRemoveFillers: () => notifier.setSegments(
+                  SubtitleOps.removeFillers(editor.segments),
+                ),
+                onSplitSentences: () => notifier.setSegments(
+                  SubtitleOps.splitBySentences(editor.segments),
+                ),
+                onAutoCaptions: widget.onAutoCaptions,
+                onImportSrt: widget.onImportSrt,
+              ),
+            _TextSub.style => _StyleStudio(
+                editor: editor,
+                fonts: fonts,
+                onPreset: notifier.applyPreset,
+                onStyle: notifier.updateStyle,
+              ),
+          },
+        EditorTab.style || EditorTab.animation => _StyleStudio(
+            editor: editor,
+            fonts: fonts,
+            onPreset: notifier.applyPreset,
+            onStyle: notifier.updateStyle,
+          ),
+        EditorTab.audio => _AudioPanel(
+            editor: editor,
+            onAddPreset: widget.onAddPreset,
+          ),
+        EditorTab.stickers => _StickersPanel(
+            editor: editor,
+            position: position,
+          ),
+        EditorTab.tools || EditorTab.ai => FeatureBrowserPanel(
+            editor: editor,
+            position: position,
+            onOpenTab: (t) {
+              // Stay in More context; primary tabs close via dock back.
+              if (t == EditorTab.tools || t == EditorTab.ai) return;
+              widget.onBack();
+            },
+            onImportMedia: widget.onImportMedia,
+            onImportSrt: widget.onImportSrt,
+            onExtractAudio: widget.onExtractAudio,
+            onBackup: widget.onBackup,
+            onAutoCaptions: widget.onAutoCaptions,
+            onOpenExport: widget.onOpenExport,
+          ),
+        _ => const SizedBox.shrink(),
+      },
+    );
+  }
+
+  List<Widget> _toolsForTab(
+    EditorState editor,
+    Duration position,
+    VideoClip? atPos,
+    void Function(VideoClip Function(VideoClip)) patch,
+    EditorController notifier,
+  ) {
+    CapCutToolIcon browse() => CapCutToolIcon(
+          icon: Icons.grid_view_rounded,
+          label: 'Panel',
+          selected: _panelOpen,
+          onTap: () => setState(() => _panelOpen = !_panelOpen),
+        );
+
+    switch (widget.tab) {
+      case EditorTab.edit:
+        return _editTools(editor, position, atPos, patch, notifier);
+      case EditorTab.text:
+        return _textTools(editor, position, notifier);
+      case EditorTab.style:
+      case EditorTab.animation:
+        return [
+          browse(),
+          CapCutToolIcon(
+            icon: Icons.style_outlined,
+            label: 'Style',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.format_size_rounded,
+            label: 'Size',
+            selected: _tool == _CtxTool.fontSize,
+            onTap: () => setState(() =>
+                _tool = _tool == _CtxTool.fontSize
+                    ? _CtxTool.none
+                    : _CtxTool.fontSize),
+          ),
+          CapCutToolIcon(
+            icon: Icons.vertical_align_center_rounded,
+            label: 'Position',
+            selected: _tool == _CtxTool.positionY,
+            onTap: () => setState(() =>
+                _tool = _tool == _CtxTool.positionY
+                    ? _CtxTool.none
+                    : _CtxTool.positionY),
+          ),
+          CapCutToolIcon(
+            icon: Icons.animation_outlined,
+            label: 'Motion',
+            selected: editor.animation.type != SubtitleAnimationType.none,
+            onTap: () {
+              notifier.setAnimation(
+                editor.animation.type == SubtitleAnimationType.none
+                    ? SubtitleAnimationConfig.fade
+                    : SubtitleAnimationConfig.none,
+              );
+            },
+          ),
+          CapCutToolIcon(
+            icon: Icons.auto_awesome_outlined,
+            label: 'Preset',
+            onTap: () {
+              setState(() => _panelOpen = true);
+              notifier.applyPreset(
+                FeatureOps.trendingTemplateIds.isEmpty
+                    ? 'neon'
+                    : FeatureOps.trendingTemplateIds.first,
+              );
+            },
+          ),
+        ];
+      case EditorTab.audio:
+        return [
+          browse(),
+          CapCutToolIcon(
+            icon: Icons.volume_off_outlined,
+            label: 'Mute',
+            selected: editor.muteOriginalAudio,
+            onTap: () =>
+                notifier.setMuteOriginalAudio(!editor.muteOriginalAudio),
+          ),
+          CapCutToolIcon(
+            icon: Icons.graphic_eq_rounded,
+            label: 'Duck',
+            selected: editor.duckingEnabled,
+            onTap: () => notifier.setDuckingEnabled(!editor.duckingEnabled),
+          ),
+          CapCutToolIcon(
+            icon: Icons.equalizer_rounded,
+            label: 'Normalize',
+            onTap: notifier.normalizeAudioVolumes,
+          ),
+          CapCutToolIcon(
+            icon: Icons.linear_scale,
+            label: 'Fades',
+            enabled: editor.audioClips.isNotEmpty,
+            onTap: editor.audioClips.isEmpty
+                ? null
+                : () => notifier.setAudioClips([
+                      for (final a in editor.audioClips)
+                        FeatureOps.withDefaultFades(a),
+                    ]),
+          ),
+          CapCutToolIcon(
+            icon: Icons.library_music_outlined,
+            label: 'Music',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.audio_file_outlined,
+            label: 'Extract',
+            enabled: widget.onExtractAudio != null,
+            onTap: widget.onExtractAudio,
+          ),
+        ];
+      case EditorTab.stickers:
+        return [
+          browse(),
+          CapCutToolIcon(
+            icon: Icons.sticky_note_2_outlined,
+            label: 'Sticker',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.add_box_outlined,
+            label: 'Add',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.align_horizontal_center,
+            label: 'Align',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.delete_outline_rounded,
+            label: 'Clear',
+            danger: true,
+            enabled: editor.stickers.isNotEmpty,
+            onTap: editor.stickers.isEmpty
+                ? null
+                : () => notifier.setStickers([]),
+          ),
+        ];
+      case EditorTab.tools:
+      case EditorTab.ai:
+        return [
+          browse(),
+          CapCutToolIcon(
+            icon: Icons.auto_awesome_rounded,
+            label: 'AI',
+            onTap: () => setState(() => _panelOpen = true),
+          ),
+          CapCutToolIcon(
+            icon: Icons.closed_caption_rounded,
+            label: 'Captions',
+            enabled: widget.onAutoCaptions != null,
+            onTap: widget.onAutoCaptions,
+          ),
+          CapCutToolIcon(
+            icon: Icons.upload_file_rounded,
+            label: 'Import',
+            enabled: widget.onImportMedia != null,
+            onTap: widget.onImportMedia,
+          ),
+          CapCutToolIcon(
+            icon: Icons.ios_share_rounded,
+            label: 'Export',
+            enabled: widget.onOpenExport != null,
+            onTap: widget.onOpenExport,
+          ),
+          CapCutToolIcon(
+            icon: Icons.backup_outlined,
+            label: 'Backup',
+            enabled: widget.onBackup != null,
+            onTap: widget.onBackup,
+          ),
+        ];
+      case EditorTab.export:
+        return [browse()];
+    }
+  }
+
+  void _addManualText(EditorController notifier, Duration position) {
+    final next = SubtitleOps.add(
+      widget.editor.segments,
+      start: position,
+      end: position + const Duration(seconds: 2),
+      text: 'Text',
+    );
+    notifier.setSegments(next);
+    final added = SubtitleOps.sorted(next).lastOrNull;
+    if (added != null) notifier.setActiveSegment(added.id);
+    setState(() {
+      _textSub = _TextSub.edit;
+      _panelOpen = true;
+    });
+  }
+
+  /// CapCut Text toolbar: hub chooser vs selection tools (Edit / Style / Animation).
+  List<Widget> _textTools(
+    EditorState editor,
+    Duration position,
+    EditorController notifier,
+  ) {
+    final hasActive = editor.activeSegmentId != null;
+    final hasCaptions = editor.segments.isNotEmpty;
+
+    // CapCut hub tools when nothing selected / first entry.
+    if (_textSub == _TextSub.hub || (!hasActive && !hasCaptions)) {
+      return [
+        CapCutToolIcon(
+          icon: Icons.title_rounded,
+          label: 'Add text',
+          onTap: () => _addManualText(notifier, position),
+        ),
+        CapCutToolIcon(
+          icon: Icons.closed_caption_rounded,
+          label: editor.isExporting ? '…' : 'Captions',
+          enabled: !editor.isExporting && widget.onAutoCaptions != null,
+          onTap: editor.isExporting
+              ? null
+              : () {
+                  setState(() {
+                    _textSub = _TextSub.edit;
+                    _panelOpen = true;
+                  });
+                  widget.onAutoCaptions?.call();
+                },
+        ),
+        CapCutToolIcon(
+          icon: Icons.auto_awesome_outlined,
+          label: 'Templates',
+          onTap: () => setState(() {
+                _textSub = _TextSub.style;
+                _panelOpen = true;
+              }),
+        ),
+        CapCutToolIcon(
+          icon: Icons.upload_file_rounded,
+          label: 'Import',
+          enabled: widget.onImportSrt != null,
+          onTap: widget.onImportSrt,
+        ),
+        if (hasCaptions)
+          CapCutToolIcon(
+            icon: Icons.edit_note_rounded,
+            label: 'Edit',
+            selected: _textSub == _TextSub.edit,
+            onTap: () => setState(() {
+                  _textSub = _TextSub.edit;
+                  _panelOpen = true;
+                }),
+          ),
+      ];
+    }
+
+    // CapCut selection tools when a caption/text clip is focused.
+    return [
+      CapCutToolIcon(
+        icon: Icons.edit_rounded,
+        label: 'Edit',
+        selected: _textSub == _TextSub.edit,
+        onTap: () => setState(() {
+              _textSub = _TextSub.edit;
+              _panelOpen = true;
+            }),
+      ),
+      CapCutToolIcon(
+        icon: Icons.style_outlined,
+        label: 'Style',
+        selected: _textSub == _TextSub.style,
+        onTap: () => setState(() {
+              _textSub = _TextSub.style;
+              _panelOpen = true;
+            }),
+      ),
+      CapCutToolIcon(
+        icon: Icons.animation_outlined,
+        label: 'Animation',
+        selected: editor.animation.type != SubtitleAnimationType.none,
+        onTap: () {
+          notifier.setAnimation(
+            editor.animation.type == SubtitleAnimationType.none
+                ? SubtitleAnimationConfig.fade
+                : SubtitleAnimationConfig.pop,
           );
+          setState(() {
+            _textSub = _TextSub.style;
+            _panelOpen = true;
+          });
         },
+      ),
+      CapCutToolIcon(
+        icon: Icons.format_size_rounded,
+        label: 'Size',
+        selected: _tool == _CtxTool.fontSize,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.fontSize
+                ? _CtxTool.none
+                : _CtxTool.fontSize),
+      ),
+      CapCutToolIcon(
+        icon: Icons.content_cut_rounded,
+        label: 'Split',
+        enabled: hasActive,
+        onTap: !hasActive
+            ? null
+            : () => notifier.setSegments(
+                  SubtitleOps.split(editor.segments, editor.activeSegmentId!),
+                ),
+      ),
+      CapCutToolIcon(
+        icon: Icons.copy_outlined,
+        label: 'Copy',
+        enabled: hasActive,
+        onTap: !hasActive
+            ? null
+            : () {
+                SubtitleSegment? src;
+                for (final s in editor.segments) {
+                  if (s.id == editor.activeSegmentId) {
+                    src = s;
+                    break;
+                  }
+                }
+                if (src == null) return;
+                final gap = src.end - src.start;
+                final next = SubtitleOps.add(
+                  editor.segments,
+                  start: src.end,
+                  end: src.end + gap,
+                  text: src.text,
+                );
+                notifier.setSegments(next);
+              },
+      ),
+      CapCutToolIcon(
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+        danger: true,
+        enabled: hasActive,
+        onTap: !hasActive
+            ? null
+            : () => notifier.setSegments(
+                  SubtitleOps.delete(editor.segments, editor.activeSegmentId!),
+                ),
+      ),
+      CapCutToolIcon(
+        icon: Icons.apps_rounded,
+        label: 'More',
+        onTap: () => setState(() {
+              _textSub = _TextSub.hub;
+              _panelOpen = true;
+            }),
+      ),
+    ];
+  }
+
+  List<Widget> _editTools(
+    EditorState editor,
+    Duration position,
+    VideoClip? atPos,
+    void Function(VideoClip Function(VideoClip)) patch,
+    EditorController notifier,
+  ) {
+    return [
+      CapCutToolIcon(
+        icon: Icons.volume_up_outlined,
+        label: 'Volume',
+        selected: _tool == _CtxTool.volume,
+        enabled: atPos != null,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.volume ? _CtxTool.none : _CtxTool.volume),
+      ),
+      CapCutToolIcon(
+        icon: Icons.linear_scale,
+        label: 'Fade',
+        selected: _tool == _CtxTool.fade,
+        enabled: atPos != null,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.fade ? _CtxTool.none : _CtxTool.fade),
+      ),
+      CapCutToolIcon(
+        icon: Icons.content_cut,
+        label: 'Split',
+        enabled: atPos != null,
+        onTap: atPos == null
+            ? null
+            : () => notifier.setVideoClips(
+                  ClipOps.split(editor.videoClips, atPos.id, position),
+                ),
+      ),
+      CapCutToolIcon(
+        icon: Icons.delete_outline,
+        label: 'Delete',
+        danger: true,
+        enabled: atPos != null && editor.videoClips.length > 1,
+        onTap: atPos == null
+            ? null
+            : () => notifier.setVideoClips(
+                  ClipOps.rippleDelete(editor.videoClips, atPos.id),
+                ),
+      ),
+      CapCutToolIcon(
+        icon: Icons.speed,
+        label: 'Speed',
+        selected: _tool == _CtxTool.speed,
+        enabled: atPos != null,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.speed ? _CtxTool.none : _CtxTool.speed),
+      ),
+      CapCutToolIcon(
+        icon: Icons.opacity,
+        label: 'Opacity',
+        selected: _tool == _CtxTool.opacity,
+        enabled: atPos != null,
+        onTap: () => setState(() => _tool =
+            _tool == _CtxTool.opacity ? _CtxTool.none : _CtxTool.opacity),
+      ),
+      CapCutToolIcon(
+        icon: Icons.crop,
+        label: 'Crop',
+        selected: _tool == _CtxTool.crop,
+        enabled: atPos != null,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.crop ? _CtxTool.none : _CtxTool.crop),
+      ),
+      CapCutToolIcon(
+        icon: Icons.rotate_right,
+        label: 'Rotate',
+        selected: _tool == _CtxTool.rotate,
+        enabled: atPos != null,
+        onTap: () => setState(() =>
+            _tool = _tool == _CtxTool.rotate ? _CtxTool.none : _CtxTool.rotate),
+      ),
+      CapCutToolIcon(
+        icon: Icons.flip,
+        label: 'Flip',
+        enabled: atPos != null,
+        onTap: atPos == null
+            ? null
+            : () => patch((c) => c.copyWith(flipH: !c.flipH)),
+      ),
+      CapCutToolIcon(
+        icon: Icons.copy_outlined,
+        label: 'Copy',
+        enabled: atPos != null,
+        onTap: atPos == null
+            ? null
+            : () => notifier.setVideoClips(
+                  ClipOps.duplicate(editor.videoClips, atPos.id),
+                ),
+      ),
+      CapCutToolIcon(
+        icon: Icons.animation_outlined,
+        label: 'Trans',
+        selected: _tool == _CtxTool.transition,
+        enabled: atPos != null,
+        onTap: () => setState(() => _tool = _tool == _CtxTool.transition
+            ? _CtxTool.none
+            : _CtxTool.transition),
+      ),
+    ];
+  }
+
+  Widget _ctxSlider(
+    EditorState editor,
+    VideoClip? atPos,
+    void Function(VideoClip Function(VideoClip)) patch,
+    EditorController notifier,
+  ) {
+    if (_tool == _CtxTool.fontSize) {
+      return _slimSlider(
+        'Size ${editor.style.fontSize.toStringAsFixed(0)}',
+        editor.style.fontSize.clamp(24, 120),
+        24,
+        120,
+        (v) => notifier.updateStyle(editor.style.copyWith(fontSize: v)),
+      );
+    }
+    if (_tool == _CtxTool.positionY) {
+      return _slimSlider(
+        'Vertical ${editor.style.positionY.toStringAsFixed(2)}',
+        editor.style.positionY.clamp(0.08, 0.92),
+        0.08,
+        0.92,
+        (v) => notifier.updateStyle(editor.style.copyWith(positionY: v)),
+      );
+    }
+    if (atPos == null) return const SizedBox.shrink();
+    switch (_tool) {
+      case _CtxTool.volume:
+        return _slimSlider(
+          'Volume ${(atPos.volume * 100).round()}%',
+          atPos.volume.clamp(0, 1),
+          0,
+          1,
+          (v) => patch((c) => c.copyWith(volume: v)),
+        );
+      case _CtxTool.fade:
+        return _slimSlider(
+          'Fade ${(atPos.fadeInMs + atPos.fadeOutMs) ~/ 2}ms',
+          ((atPos.fadeInMs + atPos.fadeOutMs) / 2).clamp(0, 2000).toDouble(),
+          0,
+          2000,
+          (v) {
+            final ms = v.round();
+            patch((c) => c.copyWith(fadeInMs: ms, fadeOutMs: ms));
+          },
+        );
+      case _CtxTool.speed:
+        return _slimSlider(
+          'Speed ${atPos.speed.toStringAsFixed(2)}x',
+          atPos.speed.clamp(0.25, 4),
+          0.25,
+          4,
+          (v) => patch((c) => c.copyWith(speed: v)),
+        );
+      case _CtxTool.opacity:
+        return _slimSlider(
+          'Opacity ${(atPos.opacity * 100).round()}%',
+          atPos.opacity.clamp(0, 1),
+          0,
+          1,
+          (v) => patch((c) => c.copyWith(opacity: v)),
+        );
+      case _CtxTool.crop:
+        return _slimSlider(
+          'Zoom ${atPos.zoom.toStringAsFixed(2)}x',
+          atPos.zoom.clamp(1, 3),
+          1,
+          3,
+          (v) => patch((c) => c.copyWith(zoom: v)),
+        );
+      case _CtxTool.rotate:
+        return _slimSlider(
+          'Rotate ${atPos.rotationDeg.round()}°',
+          atPos.rotationDeg.clamp(-180, 180),
+          -180,
+          180,
+          (v) => patch((c) => c.copyWith(rotationDeg: v)),
+        );
+      case _CtxTool.transition:
+        return ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          children: [
+            for (final e in ClipOps.transitions.entries)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(e.value, style: const TextStyle(fontSize: 11)),
+                  selected: atPos.transitionOut == e.key,
+                  selectedColor: Colors.white24,
+                  onSelected: (_) =>
+                      patch((c) => c.copyWith(transitionOut: e.key)),
+                ),
+              ),
+          ],
+        );
+      case _CtxTool.none:
+      case _CtxTool.fontSize:
+      case _CtxTool.positionY:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _slimSlider(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFB0B0B0),
+              ),
+            ),
+          ),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: Colors.white,
+                inactiveTrackColor: const Color(0xFF333333),
+                thumbColor: Colors.white,
+              ),
+              child: Slider(
+                value: value,
+                min: min,
+                max: max,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -113,6 +1096,8 @@ class EditorToolPanel extends ConsumerWidget {
     this.onBatchExport,
     this.onExportProjectJson,
     this.onImportProjectJson,
+    this.onAutoCaptions,
+    this.onOpenExport,
   });
 
   final EditorTab tab;
@@ -133,6 +1118,8 @@ class EditorToolPanel extends ConsumerWidget {
   final VoidCallback? onBatchExport;
   final VoidCallback? onExportProjectJson;
   final VoidCallback? onImportProjectJson;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback? onOpenExport;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -150,26 +1137,26 @@ class EditorToolPanel extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: const Color(0xFF0E0E0E),
         border: Border(
           left: asSidePanel
-              ? const BorderSide(color: AppColors.border)
+              ? const BorderSide(color: Color(0xFF1A1A1A))
               : BorderSide.none,
           top: asSidePanel
               ? BorderSide.none
-              : const BorderSide(color: Color(0xFF2A2A2A)),
+              : const BorderSide(color: Color(0xFF1A1A1A)),
         ),
       ),
       child: CapCutSheetChrome(
         title: switch (tab) {
-          EditorTab.tools => 'Tools',
+          EditorTab.tools => 'More',
           EditorTab.edit => 'Edit',
           EditorTab.text => 'Text',
-          EditorTab.style => 'Filters',
-          EditorTab.animation => 'Effects',
+          EditorTab.style => 'Effect',
+          EditorTab.animation => 'Effect',
           EditorTab.audio => 'Audio',
           EditorTab.stickers => 'Overlay',
-          EditorTab.ai => 'Captions',
+          EditorTab.ai => 'AI tools',
           EditorTab.export => 'Export',
         },
         onClose: asSidePanel ? null : () => onOpenTab?.call(tab),
@@ -182,12 +1169,15 @@ class EditorToolPanel extends ConsumerWidget {
             onImportSrt: onImportSrt,
             onExtractAudio: onExtractAudio,
             onBackup: onBackup,
+            onAutoCaptions: onAutoCaptions,
+            onOpenExport: onOpenExport,
           ),
         EditorTab.edit => _EditClipPanel(editor: editor, position: position),
         EditorTab.text => CaptionTextPanel(
             segments: editor.segments,
             activeId: active?.id ?? editor.activeSegmentId,
             mediaDuration: editor.timelineDuration,
+            exporting: editor.isExporting,
             onTap: (s) {
               notifier.setActiveSegment(s.id);
               onSeek(s.start);
@@ -221,36 +1211,14 @@ class EditorToolPanel extends ConsumerWidget {
             onSplitSentences: () => notifier.setSegments(
               SubtitleOps.splitBySentences(editor.segments),
             ),
+            onAutoCaptions: onAutoCaptions,
+            onImportSrt: onImportSrt,
           ),
-        EditorTab.style => _StyleStudio(
+        EditorTab.style || EditorTab.animation => _StyleStudio(
             editor: editor,
             fonts: fonts,
             onPreset: notifier.applyPreset,
             onStyle: notifier.updateStyle,
-          ),
-        EditorTab.animation => _EffectsGrid(
-            selected: editor.animation.type,
-            onSelect: (type) {
-              final config = switch (type) {
-                SubtitleAnimationType.none => SubtitleAnimationConfig.none,
-                SubtitleAnimationType.fade => SubtitleAnimationConfig.fade,
-                SubtitleAnimationType.pop => SubtitleAnimationConfig.pop,
-                SubtitleAnimationType.slideUp =>
-                  SubtitleAnimationConfig.slideUp,
-                SubtitleAnimationType.slideLeft =>
-                  SubtitleAnimationConfig.slideLeft,
-                SubtitleAnimationType.slideRight =>
-                  SubtitleAnimationConfig.slideRight,
-                SubtitleAnimationType.wordByWord =>
-                  const SubtitleAnimationConfig(
-                    type: SubtitleAnimationType.wordByWord,
-                    duration: Duration(milliseconds: 900),
-                    opacityFrom: 0,
-                    scaleFrom: 1,
-                  ),
-              };
-              notifier.setAnimation(config);
-            },
           ),
         EditorTab.audio => _AudioPanel(
             editor: editor,
@@ -322,161 +1290,173 @@ class _EditClipPanelState extends ConsumerState<_EditClipPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 78,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            children: [
-              CapCutToolIcon(
-                icon: Icons.call_split_rounded,
-                label: 'Split',
-                enabled: atPos != null,
-                onTap: atPos == null
-                    ? null
-                    : () => notifier.setVideoClips(
-                          ClipOps.split(editor.videoClips, atPos.id, position),
-                        ),
-              ),
-              CapCutToolIcon(
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete',
-                danger: true,
-                enabled: atPos != null && editor.videoClips.length > 1,
-                onTap: atPos == null
-                    ? null
-                    : () => notifier.setVideoClips(
-                          ClipOps.rippleDelete(editor.videoClips, atPos.id),
-                        ),
-              ),
-              CapCutToolIcon(
-                icon: Icons.speed_rounded,
-                label: 'Speed',
-                selected: _tool == _EditTool.speed,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.speed),
-              ),
-              CapCutToolIcon(
-                icon: Icons.volume_up_rounded,
-                label: 'Volume',
-                selected: _tool == _EditTool.volume,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.volume),
-              ),
-              CapCutToolIcon(
-                icon: Icons.opacity_rounded,
-                label: 'Opacity',
-                selected: _tool == _EditTool.opacity,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.opacity),
-              ),
-              CapCutToolIcon(
-                icon: Icons.crop_rounded,
-                label: 'Crop',
-                selected: _tool == _EditTool.crop,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.crop),
-              ),
-              CapCutToolIcon(
-                icon: Icons.rotate_right_rounded,
-                label: 'Rotate',
-                selected: _tool == _EditTool.rotate,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.rotate),
-              ),
-              CapCutToolIcon(
-                icon: Icons.flip_rounded,
-                label: 'Flip',
-                enabled: atPos != null,
-                onTap: atPos == null
-                    ? null
-                    : () => patch((c) => c.copyWith(flipH: !c.flipH)),
-              ),
-              CapCutToolIcon(
-                icon: Icons.replay_rounded,
-                label: 'Reverse',
-                enabled: atPos != null,
-                onTap: atPos == null
-                    ? null
-                    : () => notifier.setVideoClips(
-                          ClipOps.toggleReverse(editor.videoClips, atPos.id),
-                        ),
-              ),
-              CapCutToolIcon(
-                icon: Icons.pause_circle_outline,
-                label: 'Freeze',
-                enabled: atPos != null,
-                onTap: atPos == null
-                    ? null
-                    : () => notifier.setVideoClips(
-                          ClipOps.freezeFrame(
-                            editor.videoClips,
-                            atPos.id,
-                            position,
+        // CapCut horizontal edit tools
+        ColoredBox(
+          color: const Color(0xFF0E0E0E),
+          child: SizedBox(
+            height: 72,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: [
+                CapCutToolIcon(
+                  icon: Icons.content_cut_rounded,
+                  label: 'Split',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => notifier.setVideoClips(
+                            ClipOps.split(
+                                editor.videoClips, atPos.id, position),
                           ),
-                        ),
-              ),
-              CapCutToolIcon(
-                icon: Icons.content_copy_rounded,
-                label: 'Copy',
-                enabled: atPos != null,
-                onTap: atPos == null
-                    ? null
-                    : () => notifier.setVideoClips(
-                          ClipOps.duplicate(editor.videoClips, atPos.id),
-                        ),
-              ),
-              CapCutToolIcon(
-                icon: Icons.animation_rounded,
-                label: 'Trans',
-                selected: _tool == _EditTool.transition,
-                enabled: atPos != null,
-                onTap: () => setState(() => _tool = _EditTool.transition),
-              ),
-              CapCutToolIcon(
-                icon: Icons.auto_awesome,
-                label: 'Enhance',
-                enabled: atPos != null,
-                onTap:
-                    atPos == null ? null : () => patch(FeatureOps.autoEnhance),
-              ),
-            ],
+                ),
+                CapCutToolIcon(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  danger: true,
+                  enabled: atPos != null && editor.videoClips.length > 1,
+                  onTap: atPos == null
+                      ? null
+                      : () => notifier.setVideoClips(
+                            ClipOps.rippleDelete(editor.videoClips, atPos.id),
+                          ),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.speed_rounded,
+                  label: 'Speed',
+                  selected: _tool == _EditTool.speed,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.speed),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.volume_up_rounded,
+                  label: 'Volume',
+                  selected: _tool == _EditTool.volume,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.volume),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.opacity_rounded,
+                  label: 'Opacity',
+                  selected: _tool == _EditTool.opacity,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.opacity),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.crop_rounded,
+                  label: 'Crop',
+                  selected: _tool == _EditTool.crop,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.crop),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.rotate_right_rounded,
+                  label: 'Rotate',
+                  selected: _tool == _EditTool.rotate,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.rotate),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.flip_rounded,
+                  label: 'Flip',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => patch((c) => c.copyWith(flipH: !c.flipH)),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.replay_rounded,
+                  label: 'Reverse',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => notifier.setVideoClips(
+                            ClipOps.toggleReverse(editor.videoClips, atPos.id),
+                          ),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.pause_circle_outline_rounded,
+                  label: 'Freeze',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => notifier.setVideoClips(
+                            ClipOps.freezeFrame(
+                              editor.videoClips,
+                              atPos.id,
+                              position,
+                            ),
+                          ),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.copy_rounded,
+                  label: 'Copy',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => notifier.setVideoClips(
+                            ClipOps.duplicate(editor.videoClips, atPos.id),
+                          ),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.animation_outlined,
+                  label: 'Trans',
+                  selected: _tool == _EditTool.transition,
+                  enabled: atPos != null,
+                  onTap: () => setState(() => _tool = _EditTool.transition),
+                ),
+                CapCutToolIcon(
+                  icon: Icons.auto_awesome_outlined,
+                  label: 'Enhance',
+                  enabled: atPos != null,
+                  onTap: atPos == null
+                      ? null
+                      : () => patch(FeatureOps.autoEnhance),
+                ),
+              ],
+            ),
           ),
         ),
-        const Divider(height: 1, color: Color(0xFF2A2A2A)),
+        const Divider(height: 1, color: Color(0xFF1C1C1C)),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
             children: [
-              if (atPos != null) ...[
+              if (atPos == null)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Select a clip on the timeline',
+                    style: TextStyle(
+                      color: Color(0xFF6B6B6B),
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              else if (_tool == _EditTool.none) ...[
                 Text(
                   atPos.fileName.isEmpty ? 'Selected clip' : atPos.fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: Color(0xFF8E8E8E),
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   '${TimestampUtils.toUi(atPos.trimmedDuration)}'
                   '${atPos.reversed ? ' · REV' : ''}'
                   ' · ${atPos.speed.toStringAsFixed(2)}x',
                   style: const TextStyle(
-                    color: AppColors.textSecondary,
+                    color: Color(0xFF5C5C5C),
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 10),
-              ] else
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Select a clip on the timeline',
-                    style: TextStyle(color: AppColors.textMuted),
-                  ),
-                ),
+                const SizedBox(height: 14),
+              ],
               if (_tool == _EditTool.speed && atPos != null) ...[
                 const Text(
                   'Speed',
@@ -578,11 +1558,7 @@ class _EditClipPanelState extends ConsumerState<_EditClipPanel> {
                   ],
                 ),
               if (_tool == _EditTool.none) ...[
-                const Text(
-                  'Aspect ratio',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
+                const CapCutSectionTitle('ASPECT'),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -593,6 +1569,8 @@ class _EditClipPanelState extends ConsumerState<_EditClipPanel> {
                         selected: editor.aspectRatio == e.key,
                         onSelected: (_) => notifier.setAspectRatio(e.key),
                         visualDensity: VisualDensity.compact,
+                        selectedColor: Colors.white24,
+                        backgroundColor: const Color(0xFF1C1C1C),
                       ),
                   ],
                 ),
@@ -601,19 +1579,15 @@ class _EditClipPanelState extends ConsumerState<_EditClipPanel> {
                   dense: true,
                   title: const Text(
                     'Snap to playhead',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                   ),
                   value: editor.snapEnabled,
-                  activeThumbColor: AppColors.brand,
+                  activeThumbColor: Colors.white,
                   onChanged: notifier.setSnapEnabled,
                 ),
                 if (atPos != null) ...[
-                  const SizedBox(height: 4),
-                  const Text(
-                    'More',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
                   const SizedBox(height: 8),
+                  const CapCutSectionTitle('MORE'),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -696,44 +1670,49 @@ class _AudioPanel extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
-        const SectionLabel('MUSIC / AUDIO'),
-        const SizedBox(height: 8),
+        const CapCutSectionTitle('MUSIC / AUDIO'),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          dense: true,
           title: const Text(
             'Mute original video audio',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           ),
           value: editor.muteOriginalAudio,
-          activeThumbColor: AppColors.brand,
+          activeThumbColor: Colors.white,
           onChanged: notifier.setMuteOriginalAudio,
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          dense: true,
           title: const Text(
             'Ducking (music under voice)',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           ),
           value: editor.duckingEnabled,
-          activeThumbColor: AppColors.brand,
+          activeThumbColor: Colors.white,
           onChanged: notifier.setDuckingEnabled,
         ),
         Row(
           children: [
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'Auto Volume',
                 icon: Icons.equalizer,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: notifier.normalizeAudioVolumes,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'Add Fades',
                 icon: Icons.linear_scale,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: editor.audioClips.isEmpty
                     ? null
                     : () => notifier.setAudioClips([
@@ -745,7 +1724,10 @@ class _AudioPanel extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        const Text('Voice FX', style: TextStyle(fontWeight: FontWeight.w800)),
+        const Text(
+          'Voice FX',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+        ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
@@ -764,8 +1746,7 @@ class _AudioPanel extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 12),
-        const SectionLabel('MUSIC LIBRARY'),
-        const SizedBox(height: 8),
+        const CapCutSectionTitle('MUSIC LIBRARY'),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -779,8 +1760,7 @@ class _AudioPanel extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 12),
-        const SectionLabel('SFX LIBRARY'),
-        const SizedBox(height: 8),
+        const CapCutSectionTitle('SFX LIBRARY'),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -803,13 +1783,16 @@ class _AudioPanel extends ConsumerWidget {
         else
           for (final a in editor.audioClips)
             SoftCard(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     a.fileName.isEmpty ? 'Audio' : a.fileName,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                   ),
                   Text(
                     'Vol ${(a.volume * 100).round()}% · Fade ${a.fadeInMs}/${a.fadeOutMs}ms'
@@ -817,7 +1800,7 @@ class _AudioPanel extends ConsumerWidget {
                     '${a.effectId != 'none' ? ' · ${a.effectId}' : ''}',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                   Slider(
@@ -1088,12 +2071,11 @@ class _StyleStudio extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(editorControllerProvider.notifier);
     return ListView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
       children: [
-        const SectionLabel('PRESET'),
-        const SizedBox(height: 10),
+        const CapCutSectionTitle('STYLE'),
         SizedBox(
-          height: 100,
+          height: 96,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
@@ -1108,9 +2090,8 @@ class _StyleStudio extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        const SectionLabel('TRENDING TEMPLATES'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 14),
+        const CapCutSectionTitle('TEMPLATES'),
         Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -1119,12 +2100,12 @@ class _StyleStudio extends ConsumerWidget {
               ActionChip(
                 label: Text(id, style: const TextStyle(fontSize: 11)),
                 onPressed: () => onPreset(id),
+                backgroundColor: const Color(0xFF1C1C1C),
               ),
           ],
         ),
         const SizedBox(height: 12),
-        const SectionLabel('BRAND KITS'),
-        const SizedBox(height: 8),
+        const CapCutSectionTitle('BRAND'),
         Wrap(
           spacing: 6,
           children: [
@@ -1133,51 +2114,66 @@ class _StyleStudio extends ConsumerWidget {
                 label: Text(kit.name, style: const TextStyle(fontSize: 11)),
                 selected: editor.brandKitId == kit.id,
                 selectedColor: kit.primary.withValues(alpha: 0.25),
+                backgroundColor: const Color(0xFF1C1C1C),
                 onSelected: (_) => notifier.applyBrandKit(kit.id),
               ),
           ],
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
+          dense: true,
           title: const Text(
-            'Text tracking (follow sticker)',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            'Text tracking',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           ),
           value: editor.textTracking,
+          activeThumbColor: Colors.white,
           onChanged: notifier.setTextTracking,
         ),
-        const SizedBox(height: 8),
-        StudioButton(
-          label: 'Auto lyrics style',
-          icon: Icons.lyrics_outlined,
-          filled: false,
-          onPressed: () {
-            final lyrics = FeatureOps.autoLyricsStyle();
-            onPreset(lyrics.presetId);
-            onStyle(lyrics.style);
-          },
-        ),
-        const SizedBox(height: 8),
-        StudioButton(
-          label: 'Smart template fill',
-          icon: Icons.dashboard_customize,
-          filled: false,
-          onPressed: () {
-            final filled = FeatureOps.smartTemplateFill(
-              editor.segments,
-              editor.presetId,
-            );
-            ref.read(editorControllerProvider.notifier).setSegments(filled);
-            onPreset(
-              FeatureOps.trendingTemplateIds.isEmpty
-                  ? 'neon'
-                  : FeatureOps.trendingTemplateIds.first,
-            );
-          },
+        Row(
+          children: [
+            Expanded(
+              child: CapCutPillButton(
+                label: 'Lyrics style',
+                icon: Icons.lyrics_outlined,
+                filled: false,
+                expanded: true,
+                height: 34,
+                onPressed: () {
+                  final lyrics = FeatureOps.autoLyricsStyle();
+                  onPreset(lyrics.presetId);
+                  onStyle(lyrics.style);
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CapCutPillButton(
+                label: 'Smart fill',
+                icon: Icons.dashboard_customize_outlined,
+                filled: false,
+                expanded: true,
+                height: 34,
+                onPressed: () {
+                  final filled = FeatureOps.smartTemplateFill(
+                    editor.segments,
+                    editor.presetId,
+                  );
+                  ref
+                      .read(editorControllerProvider.notifier)
+                      .setSegments(filled);
+                  onPreset(
+                    FeatureOps.trendingTemplateIds.isEmpty
+                        ? 'neon'
+                        : FeatureOps.trendingTemplateIds.first,
+                  );
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        const SectionLabel('FONT'),
-        const SizedBox(height: 8),
+        const CapCutSectionTitle('FONT'),
         DropdownButtonFormField<String>(
           initialValue: editor.style.fontFamily,
           items: [
@@ -1189,55 +2185,88 @@ class _StyleStudio extends ConsumerWidget {
             onStyle(editor.style.copyWith(fontFamily: family));
           },
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Row(
           children: [
             const Text(
               'Size',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
             ),
             const Spacer(),
             Text(
               editor.style.fontSize.toStringAsFixed(0),
               style: const TextStyle(
-                color: AppColors.brand,
-                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
               ),
             ),
           ],
         ),
         Slider(
-          min: 28,
-          max: 90,
-          value: editor.style.fontSize.clamp(28, 90),
+          min: 24,
+          max: 120,
+          value: editor.style.fontSize.clamp(24, 120),
           onChanged: (v) => onStyle(editor.style.copyWith(fontSize: v)),
         ),
         Row(
           children: [
             const Text(
-              'Position',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              'Horizontal',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
             ),
             const Spacer(),
             Text(
-              editor.style.positionY.toStringAsFixed(2),
+              editor.style.positionX.toStringAsFixed(2),
               style: const TextStyle(
-                color: AppColors.brand,
-                fontWeight: FontWeight.w900,
+                color: Color(0xFF8E8E8E),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
               ),
             ),
           ],
         ),
         Slider(
-          min: 0.45,
+          min: 0.1,
           max: 0.9,
-          value: editor.style.positionY.clamp(0.45, 0.9),
+          value: editor.style.positionX.clamp(0.1, 0.9),
+          onChanged: (v) => onStyle(editor.style.copyWith(positionX: v)),
+        ),
+        Row(
+          children: [
+            const Text(
+              'Vertical',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            const Spacer(),
+            Text(
+              editor.style.positionY.toStringAsFixed(2),
+              style: const TextStyle(
+                color: Color(0xFF8E8E8E),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: 0.08,
+          max: 0.92,
+          value: editor.style.positionY.clamp(0.08, 0.92),
           onChanged: (v) => onStyle(editor.style.copyWith(positionY: v)),
         ),
-        const Text(
-          'Text position presets',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Drag text on preview · pinch to resize',
+            style: TextStyle(
+              color: Color(0xFF5C5C5C),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
+        const CapCutSectionTitle('POSITION'),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
@@ -1251,10 +2280,40 @@ class _StyleStudio extends ConsumerWidget {
               ChoiceChip(
                 label: Text(e.$1, style: const TextStyle(fontSize: 11)),
                 selected: (editor.style.positionY - e.$2).abs() < 0.03,
-                onSelected: (_) => onStyle(editor.style.copyWith(positionY: e.$2)),
+                onSelected: (_) =>
+                    onStyle(editor.style.copyWith(positionY: e.$2)),
                 visualDensity: VisualDensity.compact,
               ),
           ],
+        ),
+        const SizedBox(height: 18),
+        const CapCutSectionTitle('MOTION'),
+        SizedBox(
+          height: 168,
+          child: _EffectsGrid(
+            selected: editor.animation.type,
+            onSelect: (type) {
+              final config = switch (type) {
+                SubtitleAnimationType.none => SubtitleAnimationConfig.none,
+                SubtitleAnimationType.fade => SubtitleAnimationConfig.fade,
+                SubtitleAnimationType.pop => SubtitleAnimationConfig.pop,
+                SubtitleAnimationType.slideUp =>
+                  SubtitleAnimationConfig.slideUp,
+                SubtitleAnimationType.slideLeft =>
+                  SubtitleAnimationConfig.slideLeft,
+                SubtitleAnimationType.slideRight =>
+                  SubtitleAnimationConfig.slideRight,
+                SubtitleAnimationType.wordByWord =>
+                  const SubtitleAnimationConfig(
+                    type: SubtitleAnimationType.wordByWord,
+                    duration: Duration(milliseconds: 900),
+                    opacityFrom: 0,
+                    scaleFrom: 1,
+                  ),
+              };
+              notifier.setAnimation(config);
+            },
+          ),
         ),
       ],
     );
@@ -1282,32 +2341,20 @@ class _EffectsGrid extends StatelessWidget {
       (SubtitleAnimationType.wordByWord, Icons.lyrics_outlined, 'Karaoke'),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SectionLabel('CAPTION EFFECTS'),
-          const SizedBox(height: 12),
-          Expanded(
-            child: GridView.count(
-              crossAxisCount: 3,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.05,
-              children: [
-                for (final item in items)
-                  EffectTile(
-                    icon: item.$2,
-                    label: item.$3,
-                    selected: selected == item.$1,
-                    onTap: () => onSelect(item.$1),
-                  ),
-              ],
-            ),
+    return GridView.count(
+      crossAxisCount: 3,
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 1.05,
+      children: [
+        for (final item in items)
+          EffectTile(
+            icon: item.$2,
+            label: item.$3,
+            selected: selected == item.$1,
+            onTap: () => onSelect(item.$1),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -1348,8 +2395,7 @@ class _ExportPanel extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
-        const SectionLabel('MP4 QUALITY'),
-        const SizedBox(height: 10),
+        const CapCutSectionTitle('MP4 QUALITY'),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1364,7 +2410,7 @@ class _ExportPanel extends ConsumerWidget {
         ),
         if (editor != null) ...[
           const SizedBox(height: 12),
-          const SectionLabel('FRAME RATE'),
+          const CapCutSectionTitle('FRAME RATE'),
           Wrap(
             spacing: 6,
             children: [
@@ -1374,21 +2420,37 @@ class _ExportPanel extends ConsumerWidget {
                   selected: editor.exportFps == fps,
                   onSelected: (_) => notifier.setExportFps(fps),
                   visualDensity: VisualDensity.compact,
+                  selectedColor: Colors.white,
+                  labelStyle: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: editor.exportFps == fps
+                        ? Colors.black
+                        : AppColors.textPrimary,
+                  ),
                 ),
             ],
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Proxy / performance mode',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            dense: true,
+            title: const Text(
+              'Proxy / performance mode',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
             value: editor.proxyMode,
+            activeThumbColor: Colors.white,
             onChanged: notifier.setProxyMode,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Hardware acceleration',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            dense: true,
+            title: const Text(
+              'Hardware acceleration',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
             value: editor.hwAccel,
+            activeThumbColor: Colors.white,
             onChanged: notifier.setHwAccel,
           ),
           const SizedBox(height: 4),
@@ -1403,7 +2465,7 @@ class _ExportPanel extends ConsumerWidget {
                     Icon(
                       hasKey ? Icons.verified : Icons.warning_amber,
                       color: hasKey ? AppColors.success : AppColors.warning,
-                      size: 18,
+                      size: 16,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1412,8 +2474,8 @@ class _ExportPanel extends ConsumerWidget {
                             ? 'AI credits: Gemini key چالاکە'
                             : 'AI credits: API key زیاد بکە',
                         style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
                         ),
                       ),
                     ),
@@ -1427,87 +2489,277 @@ class _ExportPanel extends ConsumerWidget {
           const SizedBox(height: 14),
           Text(
             message.isEmpty ? 'Rendering…' : message,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.pill),
             child: LinearProgressIndicator(
               value: progress.clamp(0.0, 1.0),
-              minHeight: 6,
-              color: AppColors.brand,
+              minHeight: 3,
+              color: AppColors.playhead,
               backgroundColor: AppColors.surfaceSoft,
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        StudioButton(
+        const SizedBox(height: 14),
+        CapCutPillButton(
           label: exporting ? 'Rendering…' : 'Export MP4',
           icon: Icons.movie_creation_outlined,
           busy: exporting,
+          expanded: true,
+          height: 40,
           onPressed: exporting ? null : onExportMp4,
         ),
-        const SizedBox(height: 10),
-        StudioButton(
+        const SizedBox(height: 8),
+        CapCutPillButton(
           label: 'Export GIF (3s)',
           icon: Icons.gif_box_outlined,
           filled: false,
+          expanded: true,
+          height: 38,
           onPressed: exporting ? null : onExportGif,
         ),
-        const SizedBox(height: 10),
-        StudioButton(
+        const SizedBox(height: 8),
+        CapCutPillButton(
           label: 'Batch: MP4 + SRT + ASS',
           icon: Icons.playlist_add_check,
           filled: false,
+          expanded: true,
+          height: 38,
           onPressed: exporting ? null : onBatchExport,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'Export JSON',
                 icon: Icons.upload_file,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: onExportProjectJson,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'Import JSON',
                 icon: Icons.download,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: onImportProjectJson,
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        const SectionLabel('SUBTITLE FILES'),
-        const SizedBox(height: 10),
+        const CapCutSectionTitle('SUBTITLE FILES'),
         Row(
           children: [
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'SRT',
                 icon: Icons.subtitles_outlined,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: onExportSrt,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: StudioButton(
+              child: CapCutPillButton(
                 label: 'ASS',
                 icon: Icons.style_outlined,
                 filled: false,
+                expanded: true,
+                height: 36,
                 onPressed: onExportAss,
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// CapCut Text hub: Add text · Auto Captions · Templates · Import.
+class _CapCutTextHub extends StatelessWidget {
+  const _CapCutTextHub({
+    required this.exporting,
+    required this.hasCaptions,
+    required this.onAddText,
+    required this.onAutoCaptions,
+    required this.onTemplates,
+    this.onImportSrt,
+    this.onEditCaptions,
+  });
+
+  final bool exporting;
+  final bool hasCaptions;
+  final VoidCallback onAddText;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback onTemplates;
+  final VoidCallback? onImportSrt;
+  final VoidCallback? onEditCaptions;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8, left: 2),
+          child: Text(
+            'Text',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _HubCard(
+                icon: Icons.title_rounded,
+                title: 'Add text',
+                subtitle: 'Title · label',
+                onTap: onAddText,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _HubCard(
+                icon: Icons.closed_caption_rounded,
+                title: exporting ? 'Working…' : 'Auto Captions',
+                subtitle: 'From speech',
+                primary: true,
+                onTap: exporting ? null : onAutoCaptions,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _HubCard(
+                icon: Icons.auto_awesome_outlined,
+                title: 'Templates',
+                subtitle: 'Style · motion',
+                onTap: onTemplates,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _HubCard(
+                icon: Icons.upload_file_rounded,
+                title: 'Import SRT',
+                subtitle: 'Caption file',
+                onTap: onImportSrt,
+              ),
+            ),
+          ],
+        ),
+        if (hasCaptions && onEditCaptions != null) ...[
+          const SizedBox(height: 8),
+          CapCutPillButton(
+            label: 'Edit captions',
+            icon: Icons.edit_note_rounded,
+            filled: false,
+            expanded: true,
+            height: 36,
+            onPressed: onEditCaptions,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _HubCard extends StatelessWidget {
+  const _HubCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: enabled
+          ? () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            }
+          : null,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: enabled ? 1 : 0.4,
+        child: Container(
+          height: 72,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: primary ? const Color(0xFF1A1A1A) : const Color(0xFF161616),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: primary ? const Color(0xFF3A3A3A) : const Color(0xFF222222),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 22,
+                color: primary ? Colors.white : const Color(0xFFB0B0B0),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF6B6B6B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1526,6 +2778,10 @@ class CaptionTextPanel extends StatelessWidget {
     required this.onAdd,
     this.onRemoveFillers,
     this.onSplitSentences,
+    this.onAutoCaptions,
+    this.onImportSrt,
+    this.exporting = false,
+    this.showToolbar = true,
   });
 
   final List<SubtitleSegment> segments;
@@ -1539,6 +2795,104 @@ class CaptionTextPanel extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback? onRemoveFillers;
   final VoidCallback? onSplitSentences;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback? onImportSrt;
+  final bool exporting;
+  final bool showToolbar;
+
+  Widget _textTools() {
+    SubtitleSegment? active;
+    for (final s in segments) {
+      if (s.id == activeId) {
+        active = s;
+        break;
+      }
+    }
+    final hasActive = active != null;
+
+    return ColoredBox(
+      color: const Color(0xFF0E0E0E),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 72,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: [
+                CapCutToolIcon(
+                  icon: Icons.auto_awesome_rounded,
+                  label: exporting
+                      ? '…'
+                      : (segments.isEmpty ? 'Auto' : 'Regen'),
+                  enabled: !exporting && onAutoCaptions != null,
+                  onTap: exporting ? null : onAutoCaptions,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.add_rounded,
+                  label: 'Add',
+                  onTap: onAdd,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.upload_file_rounded,
+                  label: 'SRT',
+                  enabled: onImportSrt != null,
+                  onTap: onImportSrt,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.content_cut_rounded,
+                  label: 'Split',
+                  enabled: hasActive,
+                  onTap: hasActive ? () => onSplit(active!.id) : null,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.merge_type_rounded,
+                  label: 'Merge',
+                  enabled: hasActive,
+                  onTap: hasActive ? () => onMergeNext(active!.id) : null,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  danger: true,
+                  enabled: hasActive,
+                  onTap: hasActive ? () => onDelete(active!.id) : null,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.backspace_outlined,
+                  label: 'Fillers',
+                  enabled: onRemoveFillers != null,
+                  onTap: onRemoveFillers,
+                ),
+                CapCutToolIcon(
+                  icon: Icons.short_text_rounded,
+                  label: 'Sentences',
+                  enabled: onSplitSentences != null,
+                  onTap: onSplitSentences,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFF1C1C1C)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+            child: Row(
+              children: [
+                Text(
+                  '${segments.length} captions',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    color: Color(0xFF6B6B6B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1546,33 +2900,12 @@ class CaptionTextPanel extends StatelessWidget {
     if (sorted.isEmpty) {
       return Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
-            child: Row(
-              children: [
-                const Text(
-                  '0 CAPTIONS',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                    letterSpacing: 0.8,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add'),
-                ),
-              ],
-            ),
-          ),
+          if (showToolbar) _textTools(),
           const Expanded(
             child: EmptyHint(
               icon: Icons.subtitles_outlined,
               title: 'No captions yet',
-              subtitle: 'Tap Captions chip or Captions tab → Auto Captions',
+              subtitle: 'Tap Auto or import an SRT file',
             ),
           ),
         ],
@@ -1581,40 +2914,7 @@ class CaptionTextPanel extends StatelessWidget {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
-          child: Row(
-            children: [
-              Text(
-                '${sorted.length} CAPTIONS',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  letterSpacing: 0.8,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const Spacer(),
-              if (onRemoveFillers != null)
-                IconButton(
-                  tooltip: 'Remove fillers',
-                  onPressed: onRemoveFillers,
-                  icon: const Icon(Icons.backspace_outlined, size: 18),
-                ),
-              if (onSplitSentences != null)
-                IconButton(
-                  tooltip: 'Split sentences',
-                  onPressed: onSplitSentences,
-                  icon: const Icon(Icons.short_text, size: 18),
-                ),
-              TextButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add'),
-              ),
-            ],
-          ),
-        ),
+        if (showToolbar) _textTools(),
         Expanded(
           child: ListView.builder(
             itemCount: sorted.length,
@@ -1719,23 +3019,25 @@ class _SegmentEditorState extends State<_SegmentEditor> {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
         color: widget.selected
-            ? AppColors.brand.withValues(alpha: 0.1)
-            : AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+            ? const Color(0xFF1A1A1A)
+            : const Color(0xFF121212),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: widget.selected ? AppColors.brand : AppColors.border,
+          color: widget.selected
+              ? const Color(0xFF3A3A3A)
+              : const Color(0xFF1C1C1C),
         ),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+            padding: const EdgeInsets.fromLTRB(10, 10, 6, 8),
             child: Column(
               children: [
                 TextField(
@@ -1744,15 +3046,16 @@ class _SegmentEditorState extends State<_SegmentEditor> {
                   maxLines: 3,
                   textDirection: TextDirection.rtl,
                   style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                     height: 1.35,
                   ),
                   decoration: const InputDecoration(
                     isDense: true,
                     hintText: 'ژێرنووس بنووسە…',
                     filled: true,
-                    fillColor: Colors.black26,
+                    fillColor: Color(0xFF0A0A0A),
+                    border: InputBorder.none,
                   ),
                   onEditingComplete: _commitText,
                   onTapOutside: (_) => _commitText(),
@@ -1779,68 +3082,8 @@ class _SegmentEditorState extends State<_SegmentEditor> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _ActionBtn(
-                      icon: Icons.call_split,
-                      label: 'Split',
-                      onTap: widget.onSplit,
-                    ),
-                    _ActionBtn(
-                      icon: Icons.merge_type,
-                      label: 'Merge',
-                      onTap: widget.onMergeNext,
-                    ),
-                    _ActionBtn(
-                      icon: Icons.delete_outline,
-                      label: 'Delete',
-                      danger: true,
-                      onTap: widget.onDelete,
-                    ),
-                  ],
-                ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionBtn extends StatelessWidget {
-  const _ActionBtn({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: TextButton.icon(
-        onPressed: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        icon: Icon(
-          icon,
-          size: 16,
-          color: danger ? AppColors.danger : AppColors.textSecondary,
-        ),
-        label: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: danger ? AppColors.danger : AppColors.textSecondary,
           ),
         ),
       ),

@@ -11,7 +11,7 @@ import 'feature_catalog.dart';
 
 typedef FeatureTabOpener = void Function(EditorTab tab);
 
-/// CapCut-style searchable grid of all 136 features.
+/// Searchable grid of advanced / secondary tools (primary work lives in dock).
 class FeatureBrowserPanel extends ConsumerStatefulWidget {
   const FeatureBrowserPanel({
     super.key,
@@ -22,6 +22,8 @@ class FeatureBrowserPanel extends ConsumerStatefulWidget {
     this.onImportSrt,
     this.onExtractAudio,
     this.onBackup,
+    this.onAutoCaptions,
+    this.onOpenExport,
   });
 
   final EditorState editor;
@@ -31,6 +33,8 @@ class FeatureBrowserPanel extends ConsumerStatefulWidget {
   final VoidCallback? onImportSrt;
   final VoidCallback? onExtractAudio;
   final VoidCallback? onBackup;
+  final VoidCallback? onAutoCaptions;
+  final VoidCallback? onOpenExport;
 
   @override
   ConsumerState<FeatureBrowserPanel> createState() =>
@@ -42,6 +46,16 @@ class _FeatureBrowserPanelState extends ConsumerState<FeatureBrowserPanel> {
   FeatureCategory? _category;
   String _query = '';
 
+  /// Actions that only reopen a primary dock tab — hide unless searching.
+  static const _primaryOnlyActions = {
+    'open_timeline',
+    'open_audio',
+    'open_text',
+    'open_style',
+    'open_animation',
+    'open_stickers',
+  };
+
   @override
   void dispose() {
     _search.dispose();
@@ -49,15 +63,33 @@ class _FeatureBrowserPanelState extends ConsumerState<FeatureBrowserPanel> {
   }
 
   List<AppFeature> get _items {
+    final searching = _query.trim().isNotEmpty;
     final base = _category == null
         ? FeatureCatalog.search(_query)
         : FeatureCatalog.byCategory(_category!)
             .where((f) {
-              if (_query.trim().isEmpty) return true;
+              if (!searching) return true;
               return FeatureCatalog.search(_query).any((x) => x.id == f.id);
             })
             .toList();
-    return base;
+    if (searching || _category != null) return base;
+    // Default More view: AI, export, planned, and non-primary shortcuts.
+    return base.where((f) {
+      final a = f.actionId;
+      if (a == null) return true;
+      if (_primaryOnlyActions.contains(a)) return false;
+      return f.category == FeatureCategory.ai ||
+          f.category == FeatureCategory.export ||
+          f.category == FeatureCategory.templates ||
+          f.status != FeatureStatus.ready ||
+          a == 'ai_studio' ||
+          a == 'generate_captions' ||
+          a == 'open_export' ||
+          a == 'import_srt' ||
+          a == 'import_media' ||
+          a == 'backup' ||
+          a == 'extract_audio';
+    }).toList();
   }
 
   VideoClip? get _activeClip {
@@ -158,18 +190,20 @@ class _FeatureBrowserPanelState extends ConsumerState<FeatureBrowserPanel> {
       case 'open_text':
         widget.onOpenTab(EditorTab.text);
         return;
+      case 'generate_captions':
+        widget.onOpenTab(EditorTab.text);
+        widget.onAutoCaptions?.call();
+        return;
       case 'open_style':
       case 'templates':
-        widget.onOpenTab(EditorTab.style);
-        return;
       case 'open_animation':
-        widget.onOpenTab(EditorTab.animation);
+        widget.onOpenTab(EditorTab.style);
         return;
       case 'open_stickers':
         widget.onOpenTab(EditorTab.stickers);
         return;
       case 'open_export':
-        widget.onOpenTab(EditorTab.export);
+        widget.onOpenExport?.call();
         return;
       case 'import_srt':
         widget.onImportSrt?.call();
@@ -216,26 +250,34 @@ class _FeatureBrowserPanelState extends ConsumerState<FeatureBrowserPanel> {
               Row(
                 children: [
                   const Text(
-                    '١٣٦ تایبەتمەندی',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                    'More tools',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                   ),
                   const Spacer(),
                   Text(
-                    '$ready ئامادە · $partial بەش',
+                    '${_items.length} · $ready ready',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Search all $ready+$partial tools · AI & export live here',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _search,
                 onChanged: (v) => setState(() => _query = v),
                 decoration: InputDecoration(
-                  hintText: 'گەڕان… Split, captions, AI…',
+                  hintText: 'Search all features…',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   isDense: true,
                   filled: true,
@@ -264,59 +306,43 @@ class _FeatureBrowserPanelState extends ConsumerState<FeatureBrowserPanel> {
         const Divider(height: 1),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.82,
+              crossAxisCount: 5,
+              mainAxisSpacing: 4,
+              crossAxisSpacing: 2,
+              childAspectRatio: 0.9,
             ),
             itemCount: _items.length,
             itemBuilder: (context, i) {
               final f = _items[i];
               final color = switch (f.status) {
-                FeatureStatus.ready => AppColors.brand,
+                FeatureStatus.ready => Colors.white,
                 FeatureStatus.partial => const Color(0xFFE8A838),
-                FeatureStatus.planned => AppColors.textSecondary,
+                FeatureStatus.planned => const Color(0xFF5A5A5A),
               };
               return InkWell(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 onTap: () => _run(f),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: color.withValues(alpha: 0.35),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(f.icon, size: 20, color: color),
+                    const SizedBox(height: 3),
+                    Text(
+                      f.titleKu,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        height: 1.1,
+                        letterSpacing: -0.1,
+                        color: color,
+                      ),
                     ),
-                  ),
-                  padding: const EdgeInsets.all(6),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(f.icon, size: 22, color: color),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${f.number}',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                        ),
-                      ),
-                      Text(
-                        f.titleKu,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },

@@ -7,11 +7,11 @@ import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gal/gal.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers.dart';
@@ -24,15 +24,18 @@ import '../../models/subtitle_segment.dart';
 import '../../models/video_clip.dart';
 import '../../services/ffmpeg/video_processing_service.dart';
 import '../../widgets/studio_widgets.dart';
+import '../export/subtitle_layout.dart';
 import '../montage/feature_ops.dart';
 import '../montage/media_library.dart';
 import '../subtitle_animations/animated_subtitle_widget.dart';
 import 'caption_timeline.dart';
+import 'canvas_manipulator.dart';
 import 'clip_ops.dart';
 import 'editor_tool_dock.dart';
 import 'editor_top_bar.dart';
 import 'editor_transport.dart';
 import 'subtitle_ops.dart';
+import '../../models/subtitle_style.dart';
 
 class SubtitleEditorScreen extends ConsumerStatefulWidget {
   const SubtitleEditorScreen({super.key});
@@ -50,12 +53,19 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
   Duration _position = Duration.zero;
   bool _playing = false;
   EditorTab _tab = EditorTab.edit;
-  bool _panelExpanded = false;
+  bool _contextOpen = false;
+  bool _previewFullscreen = false;
   String? _loadedMediaPath;
   String? _activeClipId;
   bool _seeking = false;
+  int _seekGen = 0;
+  bool _disposed = false;
   DateTime _lastUiTick = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastSeekRequest = DateTime.fromMillisecondsSinceEpoch(0);
   bool _advancingClip = false;
+  CanvasManipTarget? _selectedOverlay;
+  SubtitleStyle? _styleBeforeGesture;
+  StickerItem? _stickerBeforeGesture;
 
   @override
   void initState() {
@@ -63,51 +73,68 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     _player = Player();
     _videoController = VideoController(_player);
     _posSub = _player.stream.position.listen((pos) {
-      if (!mounted || _seeking || _advancingClip) return;
+      if (!mounted || _disposed || _seeking || _advancingClip) return;
       final editor = ref.read(editorControllerProvider);
       if (editor == null) return;
 
-      VideoClip? clip;
-      if (_activeClipId != null) {
-        clip = editor.videoClips.firstWhereOrNull((c) => c.id == _activeClipId);
+      // Prefer the clip under the timeline playhead — never invent one from a gap.
+      VideoClip? clip = ClipOps.atPosition(editor.videoClips, _position);
+      if (clip == null && _activeClipId != null) {
+        final byId =
+            editor.videoClips.firstWhereOrNull((c) => c.id == _activeClipId);
+        if (byId != null &&
+            _position >= byId.timelineStart &&
+            _position < byId.timelineEnd) {
+          clip = byId;
+        }
       }
-      clip ??= ClipOps.atPosition(editor.videoClips, _position) ??
-          ClipOps.sorted(editor.videoClips).firstOrNull;
 
-      Duration timelinePos;
-      if (clip != null) {
-        final intoSource = clip.reversed
-            ? clip.outPoint - pos
-            : pos - clip.inPoint;
-        final intoMs =
-            (intoSource.inMilliseconds / clip.speed.clamp(0.25, 4.0)).round();
-        timelinePos = clip.timelineStart + Duration(milliseconds: intoMs);
-        if (timelinePos < clip.timelineStart) timelinePos = clip.timelineStart;
-        if (timelinePos > clip.timelineEnd) timelinePos = clip.timelineEnd;
-
-        // Advance once when clip ends — avoid seek feedback loop.
-        final nearEnd = clip.reversed
-            ? pos <= clip.inPoint + const Duration(milliseconds: 60)
-            : pos >= clip.outPoint - const Duration(milliseconds: 60);
-        if (_playing && nearEnd) {
-          final activeClip = clip;
+      if (clip == null) {
+        if (_playing) {
           final next = ClipOps.sorted(editor.videoClips)
-              .where((c) =>
-                  c.timelineStart >=
-                      activeClip.timelineEnd -
-                          const Duration(milliseconds: 20))
-              .where((c) => c.id != activeClip.id)
+              .where((c) => c.timelineStart > _position)
               .firstOrNull;
           if (next != null) {
             _advancingClip = true;
             _seekTo(next.timelineStart).whenComplete(() {
               _advancingClip = false;
             });
-            return;
+          } else {
+            _player.pause();
           }
         }
-      } else {
-        timelinePos = pos;
+        return;
+      }
+
+      final intoSource = clip.reversed
+          ? clip.outPoint - pos
+          : pos - clip.inPoint;
+      final intoMs =
+          (intoSource.inMilliseconds / clip.speed.clamp(0.25, 4.0)).round();
+      var timelinePos = clip.timelineStart + Duration(milliseconds: intoMs);
+      if (timelinePos < clip.timelineStart) timelinePos = clip.timelineStart;
+      if (timelinePos > clip.timelineEnd) timelinePos = clip.timelineEnd;
+
+      final nearEnd = clip.reversed
+          ? pos <= clip.inPoint + const Duration(milliseconds: 60)
+          : pos >= clip.outPoint - const Duration(milliseconds: 60);
+      if (_playing && nearEnd) {
+        final activeClip = clip;
+        final next = ClipOps.sorted(editor.videoClips)
+            .where((c) =>
+                c.timelineStart >=
+                    activeClip.timelineEnd - const Duration(milliseconds: 20))
+            .where((c) => c.id != activeClip.id)
+            .firstOrNull;
+        if (next != null) {
+          _advancingClip = true;
+          _seekTo(next.timelineStart).whenComplete(() {
+            _advancingClip = false;
+          });
+          return;
+        }
+        _player.pause();
+        timelinePos = activeClip.timelineEnd;
       }
 
       final clamped = timelinePos < Duration.zero
@@ -128,65 +155,127 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
         _position = clamped;
       }
 
+      // Local highlight only — avoid Riverpod rebuild storms every boundary.
       final active = SubtitleOps.activeAt(editor.segments, clamped);
       if (active?.id != editor.activeSegmentId) {
         ref.read(editorControllerProvider.notifier).setActiveSegment(active?.id);
       }
     });
     _playSub = _player.stream.playing.listen((playing) {
-      if (mounted) setState(() => _playing = playing);
+      if (mounted && !_disposed) setState(() => _playing = playing);
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_disposed || !mounted) return;
+      ref.read(editorControllerProvider.notifier).setRouteVisible(true);
       final editor = ref.read(editorControllerProvider);
       if (editor == null) return;
-      final first = ClipOps.sorted(editor.videoClips).firstOrNull;
-      final path = first?.sourcePath ?? editor.video.path;
-      await _player.open(Media(path), play: false);
-      await _player.setRate(first?.speed.clamp(0.25, 4.0) ?? 1.0);
-      _loadedMediaPath = path;
-      _activeClipId = first?.id;
-      if (first != null && first.inPoint > Duration.zero) {
-        await _player.seek(first.inPoint);
-      }
+      await _loadEditorMedia(editor, seekTo: Duration.zero);
     });
+  }
+
+  Future<void> _loadEditorMedia(
+    EditorState editor, {
+    Duration? seekTo,
+  }) async {
+    if (_disposed) return;
+    final first = ClipOps.sorted(editor.videoClips).firstOrNull;
+    final path = first?.sourcePath ?? editor.video.path;
+    final target = seekTo ?? _position;
+    try {
+      if (_loadedMediaPath != path) {
+        await _player.open(Media(path), play: false);
+        if (_disposed) return;
+        _loadedMediaPath = path;
+      }
+      await _player.setRate(first?.speed.clamp(0.25, 4.0) ?? 1.0);
+      if (_disposed) return;
+      _activeClipId = first?.id;
+      final clip = ClipOps.atPosition(editor.videoClips, target) ?? first;
+      if (clip != null) {
+        _activeClipId = clip.id;
+        await _player.seek(ClipOps.sourceSeek(clip, target));
+      }
+      if (mounted && !_disposed) setState(() => _position = target);
+    } catch (e) {
+      debugPrint('Media reload failed: $e');
+    }
+  }
+
+  Future<void> _leaveEditor() async {
+    final notifier = ref.read(editorControllerProvider.notifier);
+    await notifier.persist();
+    notifier.setRouteVisible(false);
+    notifier.cancelJobs();
+    if (mounted) Navigator.of(context).pop();
+    // Clear after the route is gone so we don't flash "No project loaded".
+    Future.microtask(notifier.clearSessionIfHidden);
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _seekGen++;
     _posSub?.cancel();
     _playSub?.cancel();
+    try {
+      final notifier = ref.read(editorControllerProvider.notifier);
+      notifier.setRouteVisible(false);
+      notifier.cancelJobs();
+      Future.microtask(notifier.clearSessionIfHidden);
+    } catch (_) {}
     _player.dispose();
     super.dispose();
   }
 
   Future<void> _seekTo(Duration timelinePos) async {
+    if (_disposed) return;
     final editor = ref.read(editorControllerProvider);
     if (editor == null) return;
+
+    // Debounce scrub storms from timeline drag.
+    final now = DateTime.now();
+    if (now.difference(_lastSeekRequest) < const Duration(milliseconds: 24) &&
+        _seeking) {
+      _position = timelinePos;
+      return;
+    }
+    _lastSeekRequest = now;
+
+    final gen = ++_seekGen;
     _seeking = true;
+    var target = timelinePos;
     try {
       final clips = ClipOps.sorted(editor.videoClips);
-      final clip = ClipOps.atPosition(clips, timelinePos) ??
-          (clips.isNotEmpty ? clips.last : null);
+      var clip = ClipOps.atPosition(clips, target);
+      if (clip == null && clips.isNotEmpty) {
+        // Scrub landed in a gap — snap to nearest clip edge, don't map to last.
+        clip = clips.where((c) => c.timelineStart >= target).firstOrNull ??
+            clips.last;
+        target =
+            target < clip.timelineStart ? clip.timelineStart : clip.timelineEnd;
+      }
       if (clip == null) {
-        await _player.setRate(1.0);
-        await _player.seek(timelinePos);
-        if (mounted) setState(() => _position = timelinePos);
+        if (mounted && gen == _seekGen) setState(() => _position = target);
         return;
       }
       if (_loadedMediaPath != clip.sourcePath) {
         final wasPlaying = _playing;
         await _player.open(Media(clip.sourcePath), play: false);
+        if (gen != _seekGen || _disposed) return;
         _loadedMediaPath = clip.sourcePath;
         if (wasPlaying) await _player.play();
       }
+      if (gen != _seekGen || _disposed) return;
       _activeClipId = clip.id;
       ref.read(editorControllerProvider.notifier).setActiveClip(clip.id);
+      // Preview cannot reverse; keep positive rate (export still needs reverse later).
       await _player.setRate(clip.speed.clamp(0.25, 4.0));
-      await _player.seek(ClipOps.sourceSeek(clip, timelinePos));
-      if (mounted) setState(() => _position = timelinePos);
+      if (gen != _seekGen || _disposed) return;
+      await _player.seek(ClipOps.sourceSeek(clip, target));
+      if (mounted && gen == _seekGen) setState(() => _position = target);
     } finally {
-      _seeking = false;
+      if (gen == _seekGen) _seeking = false;
     }
   }
 
@@ -211,7 +300,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       );
       setState(() {
         _tab = EditorTab.text;
-        _panelExpanded = true;
+        _contextOpen = true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -251,8 +340,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     required List<String> extensions,
   }) async {
     if (Platform.isAndroid) {
-      final dir = await getTemporaryDirectory();
-      final path = p.join(dir.path, fileName);
+      final path = await ref.read(tempFileServiceProvider).createPath(fileName);
       await File(path).writeAsBytes(bytes, flush: true);
       return path;
     }
@@ -291,6 +379,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
           videoWidth: editor.video.width,
           videoHeight: editor.video.height,
           stickers: editor.stickers,
+          animation: editor.animation,
         );
     final name = '${p.basenameWithoutExtension(editor.video.fileName)}.ass';
     final path = await _pickSavePath(
@@ -323,10 +412,17 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     final fileName =
         '${p.basenameWithoutExtension(editor.video.fileName)}_montage.mp4';
 
+    final temp = ref.read(tempFileServiceProvider);
+    final export = ref.read(subtitleExportServiceProvider);
+    final ffmpeg = ref.read(ffmpegServiceProvider);
+    final editorNotifier = ref.read(editorControllerProvider.notifier);
+    final job = editorNotifier.beginJob();
+    final jobProjectId = editor.projectId;
+
     late final String outPath;
     if (Platform.isAndroid) {
-      final dir = await getTemporaryDirectory();
-      outPath = p.join(dir.path, fileName);
+      // Keep under TempFileService so Settings → Clear Temporary Files works.
+      outPath = await temp.createPath(fileName);
     } else {
       final uri = await FilePicker.saveFile(
         dialogTitle: 'Export MP4',
@@ -339,10 +435,6 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       outPath = uri.toFilePath();
     }
 
-    final temp = ref.read(tempFileServiceProvider);
-    final export = ref.read(subtitleExportServiceProvider);
-    final ffmpeg = ref.read(ffmpegServiceProvider);
-    final editorNotifier = ref.read(editorControllerProvider.notifier);
     final workDir = await temp.createPath(
       'compose_${DateTime.now().millisecondsSinceEpoch}',
     );
@@ -354,16 +446,21 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
         progress: 0.02,
         message: 'Composing timeline…',
         clearError: true,
+        jobGen: job,
       );
 
       final clips = ClipOps.sorted(editor.videoClips);
       final composedPath = p.join(workDir, 'composed.mp4');
       String videoForBurn = editor.video.path;
 
+      final primaryPath = clips.isNotEmpty ? clips.first.sourcePath : editor.video.path;
       final needsCompose = clips.length > 1 ||
           (clips.isNotEmpty &&
-              (clips.first.inPoint > Duration.zero ||
-                  clips.first.outPoint < clips.first.sourceDuration));
+              (clips.first.sourcePath != editor.video.path ||
+                  clips.first.inPoint > Duration.zero ||
+                  clips.first.outPoint < clips.first.sourceDuration ||
+                  (clips.first.speed - 1.0).abs() > 0.01 ||
+                  clips.first.reversed));
 
       if (clips.isNotEmpty && needsCompose) {
         await ffmpeg.trimAndConcat(
@@ -383,10 +480,18 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
               isExporting: true,
               progress: progress * 0.35,
               message: message,
+              jobGen: job,
             );
           },
         );
+        if (!editorNotifier.isJobCurrent(job) ||
+            ref.read(editorControllerProvider)?.projectId != jobProjectId) {
+          return;
+        }
         videoForBurn = composedPath;
+      } else if (clips.isNotEmpty) {
+        // Single full clip — burn the clip source, not a stale primary path.
+        videoForBurn = primaryPath;
       }
 
       var mixedPath = videoForBurn;
@@ -405,9 +510,14 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
               isExporting: true,
               progress: 0.35 + progress * 0.15,
               message: message,
+              jobGen: job,
             );
           },
         );
+        if (!editorNotifier.isJobCurrent(job) ||
+            ref.read(editorControllerProvider)?.projectId != jobProjectId) {
+          return;
+        }
         mixedPath = mixOut;
       }
 
@@ -421,6 +531,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
         videoWidth: editor.video.width,
         videoHeight: editor.video.height,
         stickers: editor.stickers,
+        animation: editor.animation,
       );
       await File(assPath).writeAsString(assBody, flush: true);
       if (!await File(assPath).exists() || (await File(assPath).length()) < 50) {
@@ -431,6 +542,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
         isExporting: true,
         progress: 0.55,
         message: 'Burning captions…',
+        jobGen: job,
       );
 
       final fontsDir = await _resolveFontsDir();
@@ -449,9 +561,16 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
             isExporting: true,
             progress: 0.55 + progress * 0.45,
             message: message,
+            jobGen: job,
           );
         },
       );
+
+      if (!editorNotifier.isJobCurrent(job) ||
+          ref.read(editorControllerProvider)?.projectId != jobProjectId) {
+        await temp.delete(assPath);
+        return;
+      }
 
       if (!await File(outPath).exists()) {
         throw Exception('Export finished but output MP4 was not created');
@@ -462,6 +581,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
         progress: 1,
         message: 'Export complete',
         lastExportPath: outPath,
+        jobGen: job,
       );
       await temp.delete(assPath);
       await _afterExport(outPath, share: Platform.isAndroid, isVideo: true);
@@ -469,6 +589,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       editorNotifier.setExporting(
         isExporting: false,
         errorMessage: e.toString(),
+        jobGen: job,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -537,7 +658,78 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
             fileName: p.basename(path),
           ),
         );
-    setState(() => _tab = EditorTab.audio);
+    setState(() {
+      _tab = EditorTab.audio;
+      _contextOpen = true;
+    });
+  }
+
+  Future<void> _showAddSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.videocam_outlined),
+                  title: const Text(
+                    'Video',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _addVideoClip();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.music_note_outlined),
+                  title: const Text(
+                    'Audio',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _addAudioClip();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.closed_caption_outlined),
+                  title: const Text(
+                    'Auto Captions',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _tab = EditorTab.text;
+                      _contextOpen = true;
+                    });
+                    _runAutoCaptions();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _importSrt() async {
@@ -652,10 +844,11 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     if (editor == null) return;
     final fileName =
         '${p.basenameWithoutExtension(editor.video.fileName)}_clip.gif';
+    final notifier = ref.read(editorControllerProvider.notifier);
+    final job = notifier.beginJob();
     late final String outPath;
     if (Platform.isAndroid) {
-      final dir = await getTemporaryDirectory();
-      outPath = p.join(dir.path, fileName);
+      outPath = await ref.read(tempFileServiceProvider).createPath(fileName);
     } else {
       final uri = await FilePicker.saveFile(
         dialogTitle: 'Export GIF',
@@ -667,13 +860,13 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       if (uri == null) return;
       outPath = uri.toFilePath();
     }
-    final notifier = ref.read(editorControllerProvider.notifier);
     try {
       notifier.setExporting(
         isExporting: true,
         progress: 0.05,
         message: 'Exporting GIF…',
         clearError: true,
+        jobGen: job,
       );
       final path = await ref.read(ffmpegServiceProvider).exportGif(
             videoPath: editor.video.path,
@@ -681,12 +874,19 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
             start: _position,
             duration: const Duration(seconds: 3),
           );
-      notifier.setExporting(isExporting: false, progress: 1, lastExportPath: path);
+      if (!notifier.isJobCurrent(job)) return;
+      notifier.setExporting(
+        isExporting: false,
+        progress: 1,
+        lastExportPath: path,
+        jobGen: job,
+      );
       await _afterExport(path, share: Platform.isAndroid);
     } catch (e) {
       notifier.setExporting(
         isExporting: false,
         errorMessage: e.toString(),
+        jobGen: job,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -754,6 +954,41 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     bool isVideo = false,
   }) async {
     if (!mounted) return;
+
+    // Android exports land in app temp storage — copy into the system gallery
+    // so the finished video shows up in Photos / Gallery apps.
+    if (Platform.isAndroid && isVideo) {
+      final saved = await _saveExportToGallery(path);
+      if (!mounted) return;
+      if (saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('ڤیدیۆکە پاشەکەوتکرا بۆ گەلەری'),
+            action: SnackBarAction(
+              label: 'کردنەوە',
+              onPressed: () {
+                unawaited(Gal.open());
+              },
+            ),
+          ),
+        );
+        // Gallery has a copy — drop the temp export when tracked.
+        unawaited(ref.read(tempFileServiceProvider).delete(path));
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'نەتوانرا بۆ گەلەری پاشەکەوت بکرێت — Share بکە',
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+      );
+      await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+      return;
+    }
+
     if (share) {
       await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
       return;
@@ -781,15 +1016,65 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     }
   }
 
-  void _selectTab(EditorTab tab) {
-    setState(() {
-      if (_tab == tab && _panelExpanded) {
-        _panelExpanded = false;
-      } else {
-        _tab = tab;
-        _panelExpanded = true;
+  Future<bool> _saveExportToGallery(String path) async {
+    try {
+      final hasAccess = await Gal.hasAccess(toAlbum: true);
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess(toAlbum: true);
+        if (!granted) return false;
       }
+      await Gal.putVideo(path, album: 'Montage');
+      return true;
+    } on GalException catch (e) {
+      debugPrint('Gallery save failed: ${e.type}');
+      return false;
+    } catch (e) {
+      debugPrint('Gallery save failed: $e');
+      return false;
+    }
+  }
+
+  void _selectTab(EditorTab tab) {
+    // Export is top-bar only; motion lives inside Style.
+    if (tab == EditorTab.export) {
+      final editor = ref.read(editorControllerProvider);
+      if (editor != null) unawaited(_showExportSheet(editor));
+      return;
+    }
+    final resolved = tab == EditorTab.animation ? EditorTab.style : tab;
+    setState(() {
+      // CapCut: every dock tab opens its own contextual section + « back.
+      if (_contextOpen && _tab == resolved) {
+        _contextOpen = false;
+        return;
+      }
+      _tab = resolved;
+      _contextOpen = true;
     });
+  }
+
+  void _closeContext() {
+    setState(() {
+      _contextOpen = false;
+    });
+  }
+
+  Widget _contextBar(EditorState editor) {
+    return CapCutTabContextBar(
+      tab: _tab,
+      editor: editor,
+      position: _position,
+      onBack: _closeContext,
+      onSeek: _seekTo,
+      onOpenTab: _selectTab,
+      onAutoCaptions: _runAutoCaptions,
+      onImportSrt: _importSrt,
+      onImportMedia: _addVideoClip,
+      onExtractAudio: _extractAudio,
+      onBackup: _backupProject,
+      onOpenExport: () => _showExportSheet(editor),
+      onAddPreset: _addMediaPreset,
+    );
   }
 
   Future<void> _showExportSheet(EditorState editor) async {
@@ -841,17 +1126,16 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        for (final q in ExportQuality.values) ...[
-                          if (q != ExportQuality.values.first)
-                            const SizedBox(width: 8),
+                        for (final q in ExportQuality.values)
                           QualityChip(
                             label: q.label,
                             selected: live.exportQuality == q,
                             onTap: () => notifier.setExportQuality(q),
                           ),
-                        ],
                       ],
                     ),
                     if (live.isExporting) ...[
@@ -860,15 +1144,18 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
                         live.exportMessage.isEmpty
                             ? 'Rendering…'
                             : live.exportMessage,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(999),
                         child: LinearProgressIndicator(
                           value: live.exportProgress.clamp(0.0, 1.0),
-                          minHeight: 6,
-                          color: AppColors.brand,
+                          minHeight: 3,
+                          color: AppColors.playhead,
                           backgroundColor: AppColors.surfaceSoft,
                         ),
                       ),
@@ -945,16 +1232,50 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       onSeek: _seekTo,
       onSelect: (s) async {
         notifier.setActiveSegment(s.id);
+        // CapCut: selecting a caption opens Text → Edit captions tools.
+        setState(() {
+          _contextOpen = true;
+          _tab = EditorTab.text;
+        });
         await _seekTo(s.start);
       },
       onSelectClip: (c) async {
         notifier.setActiveClip(c.id);
+        setState(() {
+          _contextOpen = true;
+          _tab = EditorTab.edit;
+        });
         await _seekTo(c.timelineStart);
       },
       onSegmentsChanged: notifier.setSegments,
       onClipsChanged: notifier.setVideoClips,
-      height: wide ? 188 : 172,
+      onAddMedia: _showAddSheet,
+      height: wide ? 180 : 168,
     );
+
+    Widget transportBar() => EditorTransport(
+          position: _position,
+          duration: editor.timelineDuration,
+          playing: _playing,
+          canUndo: editor.canUndo,
+          canRedo: editor.canRedo,
+          fullscreen: _previewFullscreen,
+          onPlayPause: () =>
+              _playing ? _player.pause() : _player.play(),
+          onSeek: _seekTo,
+          onUndo: () => notifier.undo(),
+          onRedo: () => notifier.redo(),
+          onKeyframe: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Keyframes coming soon'),
+                duration: Duration(seconds: 1),
+              ),
+            );
+          },
+          onFullscreen: () =>
+              setState(() => _previewFullscreen = !_previewFullscreen),
+        );
 
     final toolPanel = EditorToolPanel(
       tab: _tab,
@@ -975,9 +1296,39 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
       onBatchExport: _batchExport,
       onExportProjectJson: _exportProjectJson,
       onImportProjectJson: _importProjectJson,
+      onAutoCaptions: _runAutoCaptions,
+      onOpenExport: () => _showExportSheet(editor),
     );
 
-    return Scaffold(
+    // Reload player when project / primary media changes (e.g. Import JSON).
+    ref.listen<EditorState?>(editorControllerProvider, (prev, next) {
+      if (next == null || _disposed) return;
+      final prevPath = prev == null
+          ? null
+          : (ClipOps.sorted(prev.videoClips).firstOrNull?.sourcePath ??
+              prev.video.path);
+      final nextPath =
+          ClipOps.sorted(next.videoClips).firstOrNull?.sourcePath ??
+              next.video.path;
+      final projectChanged = prev?.projectId != next.projectId;
+      final mediaChanged = prevPath != nextPath;
+      if (projectChanged || mediaChanged) {
+        unawaited(
+          _loadEditorMedia(
+            next,
+            seekTo: projectChanged ? Duration.zero : _position,
+          ),
+        );
+      }
+    });
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _leaveEditor();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
@@ -990,17 +1341,9 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
               canRedo: editor.canRedo,
               onUndo: () => notifier.undo(),
               onRedo: () => notifier.redo(),
-              onBack: () async {
-                await notifier.persist();
-                if (context.mounted) Navigator.pop(context);
-              },
-              onExport: () {
-                if (wide) {
-                  _selectTab(EditorTab.export);
-                } else {
-                  _showExportSheet(editor);
-                }
-              },
+              onAddMedia: _showAddSheet,
+              onBack: _leaveEditor,
+              onExport: () => _showExportSheet(editor),
             ),
             if (editor.isExporting)
               LinearProgressIndicator(
@@ -1020,128 +1363,85 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
                               child: Column(
                                 children: [
                                   Expanded(
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        _preview(editor, active),
-                                        _previewQuickActions(editor),
-                                      ],
-                                    ),
+                                    child: _preview(editor, active),
                                   ),
-                                  EditorTransport(
-                                    position: _position,
-                                    duration: editor.timelineDuration,
-                                    playing: _playing,
-                                    onPlayPause: () => _playing
-                                        ? _player.pause()
-                                        : _player.play(),
-                                    onSeek: _seekTo,
-                                  ),
-                                  timeline,
+                                  transportBar(),
+                                  if (!_previewFullscreen) timeline,
                                 ],
                               ),
                             ),
-                            Container(
-                              width: 360,
-                              color: AppColors.surface,
-                              child: toolPanel,
-                            ),
+                            if (!_previewFullscreen)
+                              Container(
+                                width: 360,
+                                color: AppColors.surface,
+                                child: _contextOpen
+                                    ? _contextBar(editor)
+                                    : toolPanel,
+                              ),
                           ],
                         )
                       : Column(
                           children: [
                             Expanded(
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  _preview(editor, active),
-                                  _previewQuickActions(editor),
-                                ],
-                              ),
+                              child: _preview(editor, active),
                             ),
-                            EditorTransport(
-                              position: _position,
-                              duration: editor.timelineDuration,
-                              playing: _playing,
-                              onPlayPause: () =>
-                                  _playing ? _player.pause() : _player.play(),
-                              onSeek: _seekTo,
-                            ),
-                            timeline,
-                            if (_panelExpanded)
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOutCubic,
-                                height: switch (_tab) {
-                                  EditorTab.tools => 300,
-                                  EditorTab.text => 280,
-                                  EditorTab.animation => 220,
-                                  EditorTab.export => 300,
-                                  EditorTab.style => 280,
-                                  EditorTab.edit => 320,
-                                  EditorTab.audio => 280,
-                                  EditorTab.stickers => 260,
-                                  EditorTab.ai => 320,
-                                },
-                                decoration: const BoxDecoration(
-                                  color: AppColors.surface,
-                                  border: Border(
-                                    top: BorderSide(
-                                      color: Color(0xFF222222),
-                                    ),
-                                  ),
+                            transportBar(),
+                            if (!_previewFullscreen) ...[
+                              timeline,
+                              if (_contextOpen)
+                                _contextBar(editor)
+                              else
+                                EditorBottomDock(
+                                  tab: _tab,
+                                  onTab: _selectTab,
                                 ),
-                                child: toolPanel,
-                              ),
-                            EditorBottomDock(tab: _tab, onTab: _selectTab),
+                            ],
                           ],
                         ),
                   if (editor.isExporting)
                     Positioned.fill(
                       child: ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.62),
+                        color: Colors.black.withValues(alpha: 0.72),
                         child: Center(
-                          child: SoftCard(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 28,
-                              vertical: 22,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 42,
-                                  height: 42,
-                                  child: CircularProgressIndicator(
-                                    value: editor.exportProgress > 0.02
-                                        ? editor.exportProgress
-                                        : null,
-                                    strokeWidth: 3,
-                                    color: AppColors.playhead,
-                                  ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: CircularProgressIndicator(
+                                  value: editor.exportProgress > 0.02
+                                      ? editor.exportProgress
+                                      : null,
+                                  strokeWidth: 2.5,
+                                  color: AppColors.playhead,
+                                  backgroundColor: AppColors.surfaceSoft,
                                 ),
-                                const SizedBox(height: 14),
-                                Text(
-                                  editor.exportMessage.isNotEmpty
-                                      ? editor.exportMessage
-                                      : 'چاوەڕێ بە…',
-                                  textAlign: TextAlign.center,
-                                  textDirection: TextDirection.rtl,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                  ),
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                editor.exportMessage.isNotEmpty
+                                    ? editor.exportMessage
+                                    : 'چاوەڕێ بە…',
+                                textAlign: TextAlign.center,
+                                textDirection: TextDirection.rtl,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  letterSpacing: -0.2,
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  '${((editor.exportProgress.clamp(0, 1)) * 100).round()}%',
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${((editor.exportProgress.clamp(0, 1)) * 100).round()}%',
+                                style: const TextStyle(
+                                  color: AppColors.playhead,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  fontFeatures: [FontFeature.tabularFigures()],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1152,35 +1452,7 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _previewQuickActions(EditorState editor) {
-    return Positioned(
-      right: 10,
-      bottom: 10,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _CapCutChip(
-            icon: Icons.closed_caption_rounded,
-            label: editor.segments.isEmpty ? 'Captions' : 'Re-caption',
-            onTap: _runAutoCaptions,
-          ),
-          const SizedBox(height: 8),
-          _CapCutChip(
-            icon: Icons.add_rounded,
-            label: 'Media',
-            onTap: _addVideoClip,
-          ),
-          const SizedBox(height: 8),
-          _CapCutChip(
-            icon: Icons.music_note_rounded,
-            label: 'Music',
-            onTap: _addAudioClip,
-          ),
-        ],
-      ),
+    ),
     );
   }
 
@@ -1312,33 +1584,130 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
                           ),
                         ),
                       ),
+                    // Deselect behind overlays so empty taps clear selection.
+                    if (_selectedOverlay != null)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () => setState(() => _selectedOverlay = null),
+                        ),
+                      ),
                     if (active != null)
-                      AnimatedSubtitleWidget(
-                        key: ValueKey(active.id),
-                        text: active.text,
-                        style: editor.textTracking && sticker != null
-                            ? FeatureOps.textTrackingFollow(
-                                editor.style,
-                                x: sticker.x,
-                                y: (sticker.y + 0.12).clamp(0.1, 0.9),
-                              )
-                            : editor.style,
-                        animation: editor.animation,
-                        videoSize: size,
+                      CanvasManipulator(
+                        canvasSize: size,
+                        nx: editor.style.positionX,
+                        ny: editor.style.positionY,
+                        scale: editor.style.fontSize,
+                        minScale: 24,
+                        maxScale: 120,
+                        maxWidthFraction: editor.style.maxWidth,
+                        selected: _selectedOverlay == CanvasManipTarget.caption,
+                        onSelected: () {
+                          setState(
+                            () => _selectedOverlay = CanvasManipTarget.caption,
+                          );
+                          _styleBeforeGesture ??= editor.style;
+                        },
+                        onChanged: (nx, ny, scale) {
+                          _styleBeforeGesture ??= editor.style;
+                          ref
+                              .read(editorControllerProvider.notifier)
+                              .patchStyleLive(
+                                editor.style.copyWith(
+                                  positionX: nx,
+                                  positionY: ny,
+                                  fontSize: scale,
+                                ),
+                              );
+                        },
+                        onCommit: (nx, ny, scale) {
+                          final before =
+                              _styleBeforeGesture ?? editor.style;
+                          final after = before.copyWith(
+                            positionX: nx,
+                            positionY: ny,
+                            fontSize: scale,
+                          );
+                          ref
+                              .read(editorControllerProvider.notifier)
+                              .commitStyleGesture(before, after);
+                          _styleBeforeGesture = null;
+                        },
+                        child: AnimatedSubtitleWidget(
+                          key: ValueKey(active.id),
+                          text: active.text,
+                          style: editor.textTracking && sticker != null
+                              ? FeatureOps.textTrackingFollow(
+                                  editor.style,
+                                  x: sticker.x,
+                                  y: (sticker.y + 0.12).clamp(0.1, 0.9),
+                                )
+                              : editor.style,
+                          animation: editor.animation,
+                          videoSize: size,
+                          sourceSize: Size(
+                            editor.video.width.toDouble().clamp(1, 8192),
+                            editor.video.height.toDouble().clamp(1, 8192),
+                          ),
+                          positioned: false,
+                        ),
                       ),
                     if (sticker != null)
-                      Positioned(
-                        left: sticker.x * width - 24 * sticker.scale,
-                        top: sticker.y * height - 24 * sticker.scale,
+                      CanvasManipulator(
+                        canvasSize: size,
+                        nx: sticker.x,
+                        ny: sticker.y,
+                        scale: sticker.scale,
+                        minScale: 0.4,
+                        maxScale: 3.0,
+                        maxWidthFraction: 0.5,
+                        selected:
+                            _selectedOverlay == CanvasManipTarget.sticker,
+                        onSelected: () {
+                          setState(
+                            () =>
+                                _selectedOverlay = CanvasManipTarget.sticker,
+                          );
+                          _stickerBeforeGesture ??= sticker;
+                        },
+                        onChanged: (nx, ny, scale) {
+                          final live = sticker;
+                          if (live == null) return;
+                          _stickerBeforeGesture ??= live;
+                          ref
+                              .read(editorControllerProvider.notifier)
+                              .patchStickerLive(
+                                live.copyWith(x: nx, y: ny, scale: scale),
+                              );
+                        },
+                        onCommit: (nx, ny, scale) {
+                          final live = sticker;
+                          if (live == null) return;
+                          final before = _stickerBeforeGesture ?? live;
+                          final after =
+                              before.copyWith(x: nx, y: ny, scale: scale);
+                          ref
+                              .read(editorControllerProvider.notifier)
+                              .commitStickerGesture(before, after);
+                          _stickerBeforeGesture = null;
+                        },
                         child: Opacity(
                           opacity: sticker.opacity.clamp(0.15, 1.0),
                           child: Transform.rotate(
                             angle: sticker.rotationDeg * 3.14159 / 180,
-                            child: Transform.scale(
-                              scale: sticker.animated ? 1.08 : 1.0,
-                              child: Text(
-                                sticker.emoji,
-                                style: TextStyle(fontSize: 40 * sticker.scale),
+                            child: Text(
+                              sticker.emoji,
+                              style: TextStyle(
+                                fontSize: SubtitleLayout.stickerBaseSize(
+                                      editor.video.height
+                                          .toDouble()
+                                          .clamp(1, 8192),
+                                    ) *
+                                    (size.height /
+                                        editor.video.height
+                                            .toDouble()
+                                            .clamp(1, 8192)) *
+                                    sticker.scale,
                               ),
                             ),
                           ),
@@ -1408,48 +1777,6 @@ class _SubtitleEditorScreenState extends ConsumerState<SubtitleEditorScreen> {
     m[0] -= 0.05;
     m[8] += 0.08;
     return m;
-  }
-}
-
-class _CapCutChip extends StatelessWidget {
-  const _CapCutChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.55),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

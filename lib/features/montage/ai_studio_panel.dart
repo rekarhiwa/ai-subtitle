@@ -182,34 +182,16 @@ class _AiStudioPanelState extends ConsumerState<AiStudioPanel> {
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
-        const SectionLabel('CAPTIONS'),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _busy
-                ? null
-                : () => _run(
-                      () => notifier.generateCaptions(
-                        sourceLanguageCode: 'auto',
-                        subtitleLanguageCode: 'ckb',
-                      ),
-                      'Auto Captions',
-                    ),
-            icon: const Icon(Icons.closed_caption_rounded, size: 18),
-            label: Text(
-              editor.segments.isEmpty
-                  ? 'Auto Captions'
-                  : 'Regenerate captions',
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-            ),
+        const Text(
+          'Auto Captions lives in the Captions tab.',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 16),
-        const SectionLabel('AI STUDIO'),
+        const SizedBox(height: 12),
+        const SectionLabel('AI TOOLS'),
         const SizedBox(height: 6),
         if (_busy)
           Padding(

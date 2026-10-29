@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme/app_theme.dart';
+import '../features/subtitle_editor/capcut_widgets.dart';
 
 class StudioButton extends StatelessWidget {
   const StudioButton({
@@ -13,7 +14,7 @@ class StudioButton extends StatelessWidget {
     this.filled = true,
     this.danger = false,
     this.expanded = true,
-    this.height = 48,
+    this.height = 40,
   });
 
   final String label;
@@ -27,60 +28,16 @@ class StudioButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = busy
-        ? SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: filled ? Colors.black : AppColors.brand,
-            ),
-          )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 18),
-                const SizedBox(width: 8),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          );
-
-    final button = filled
-        ? ElevatedButton(
-            onPressed: busy || onPressed == null
-                ? null
-                : () {
-                    HapticFeedback.lightImpact();
-                    onPressed!();
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: danger ? AppColors.danger : Colors.white,
-              foregroundColor: danger ? Colors.white : Colors.black,
-              minimumSize: Size(0, height),
-            ),
-            child: child,
-          )
-        : OutlinedButton(
-            onPressed: busy || onPressed == null
-                ? null
-                : () {
-                    HapticFeedback.selectionClick();
-                    onPressed!();
-                  },
-            style: OutlinedButton.styleFrom(minimumSize: Size(0, height)),
-            child: child,
-          );
-
-    return expanded ? SizedBox(width: double.infinity, child: button) : button;
+    return CapCutPillButton(
+      label: label,
+      onPressed: onPressed,
+      icon: icon,
+      busy: busy,
+      filled: filled,
+      danger: danger,
+      expanded: expanded,
+      height: height,
+    );
   }
 }
 
@@ -92,21 +49,7 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textSecondary,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const Spacer(),
-        ?trailing,
-      ],
-    );
+    return CapCutSectionTitle(text, trailing: trailing);
   }
 }
 
@@ -114,7 +57,7 @@ class SoftCard extends StatelessWidget {
   const SoftCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(12),
     this.onTap,
     this.borderColor,
   });
@@ -132,7 +75,7 @@ class SoftCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: borderColor != null ? Border.all(color: borderColor!) : null,
+        border: Border.all(color: borderColor ?? AppColors.hairline),
       ),
       child: child,
     );
@@ -172,26 +115,26 @@ class StatusChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.pill),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: color.withValues(alpha: 0.35)),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 ok ? Icons.check_circle : Icons.key,
-                size: 14,
+                size: 13,
                 color: color,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                   color: color,
                 ),
               ),
@@ -223,13 +166,14 @@ class EmptyHint extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 28, color: AppColors.textMuted),
+            Icon(icon, size: 26, color: AppColors.textMuted),
             const SizedBox(height: 8),
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
                 color: AppColors.textSecondary,
               ),
             ),
@@ -239,7 +183,7 @@ class EmptyHint extends StatelessWidget {
                 subtitle!,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: AppColors.textMuted,
                 ),
               ),
@@ -265,33 +209,32 @@ class QualityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: selected ? AppColors.brand : AppColors.surfaceSoft,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(
-                color: selected ? AppColors.brand : AppColors.border,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(
+              color: selected ? Colors.white : AppColors.border,
             ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                color: selected ? Colors.black : AppColors.textPrimary,
-              ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              letterSpacing: -0.2,
+              color: selected ? Colors.black : AppColors.textPrimary,
             ),
           ),
         ),
@@ -323,18 +266,16 @@ class EffectTile extends StatelessWidget {
           HapticFeedback.selectionClick();
           onTap();
         },
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
           decoration: BoxDecoration(
-            color: selected
-                ? AppColors.brand.withValues(alpha: 0.15)
-                : AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(AppRadius.md),
+            color: AppColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
-              color: selected ? AppColors.brand : AppColors.border,
-              width: selected ? 1.4 : 1,
+              color: selected ? Colors.white : AppColors.hairline,
+              width: selected ? 1.2 : 1,
             ),
           ),
           child: Column(
@@ -342,19 +283,20 @@ class EffectTile extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 22,
-                color: selected ? AppColors.brand : AppColors.textSecondary,
+                size: 20,
+                color: selected ? Colors.white : AppColors.textSecondary,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 label,
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? AppColors.brand : AppColors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.15,
+                  color: selected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
             ],
@@ -388,23 +330,23 @@ class PresetCard extends StatelessWidget {
           HapticFeedback.selectionClick();
           onTap();
         },
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 108,
-          padding: const EdgeInsets.all(10),
+          duration: const Duration(milliseconds: 140),
+          width: 100,
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(AppRadius.md),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
-              color: selected ? AppColors.brand : AppColors.border,
-              width: selected ? 1.6 : 1,
+              color: selected ? Colors.white : AppColors.hairline,
+              width: selected ? 1.2 : 1,
             ),
           ),
           child: Column(
             children: [
               Container(
-                height: 48,
+                height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: Colors.black,
@@ -416,23 +358,24 @@ class PresetCard extends StatelessWidget {
                     color: previewColor,
                     fontWeight: FontWeight.w900,
                     fontSize: name == 'Bold'
-                        ? 22
+                        ? 20
                         : name == 'Minimal'
-                            ? 14
-                            : 18,
+                            ? 13
+                            : 16,
                     shadows: const [
                       Shadow(color: Colors.black87, blurRadius: 4),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 name,
                 style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  color: selected ? AppColors.brand : AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  letterSpacing: -0.15,
+                  color: selected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
             ],
@@ -460,10 +403,11 @@ class StepperChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSoft,
+        color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.hairline),
       ),
       child: Row(
         children: [
@@ -471,27 +415,27 @@ class StepperChip extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
               color: AppColors.textSecondary,
             ),
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             onPressed: () {
               HapticFeedback.selectionClick();
               onMinus();
             },
-            icon: const Icon(Icons.remove, size: 16),
+            icon: const Icon(Icons.remove, size: 15),
           ),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -499,12 +443,12 @@ class StepperChip extends StatelessWidget {
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             onPressed: () {
               HapticFeedback.selectionClick();
               onPlus();
             },
-            icon: const Icon(Icons.add, size: 16),
+            icon: const Icon(Icons.add, size: 15),
           ),
         ],
       ),

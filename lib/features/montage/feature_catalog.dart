@@ -186,7 +186,7 @@ class FeatureCatalog {
     // C. Text & Captions 36–55
     _f(36, 'auto_captions', 'ژێرنووسی ئۆتۆماتیکی AI', 'Auto Captions AI',
         FeatureCategory.text, Icons.closed_caption, FeatureStatus.ready,
-        'open_text'),
+        'generate_captions'),
     _f(37, 'multi_lang_asr', 'ناساندنی فرە-زمان', 'Multi-language speech recognition',
         FeatureCategory.text, Icons.translate, FeatureStatus.ready, 'open_text'),
     _f(38, 'caption_list', 'لیستی دەستکاری ژێرنووس', 'Caption edit list',
@@ -320,7 +320,8 @@ class FeatureCatalog {
     _f(88, 'long_to_short', 'Long → Shorts', 'Long video to Shorts',
         FeatureCategory.ai, Icons.smartphone, FeatureStatus.ready, 'aspect_ratio'),
     _f(89, 'ai_captions', 'AI Auto captions', 'AI Auto captions',
-        FeatureCategory.ai, Icons.subtitles, FeatureStatus.ready, 'open_text'),
+        FeatureCategory.ai, Icons.subtitles, FeatureStatus.ready,
+        'generate_captions'),
     _f(90, 'transcript_edit', 'بڕین لەسەر نووسین', 'Transcript-based edit',
         FeatureCategory.ai, Icons.text_snippet, FeatureStatus.ready, 'open_text'),
     _f(91, 'filler_remove', 'سڕینەوەی وشەی زیادە', 'Remove filler words',
@@ -441,7 +442,7 @@ class FeatureCatalog {
       FeatureCategory.captions,
       Icons.subtitles_outlined,
       FeatureStatus.ready,
-      'open_text',
+      'generate_captions',
     ),
   ];
 
